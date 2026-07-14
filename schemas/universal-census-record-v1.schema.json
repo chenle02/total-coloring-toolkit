@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/universal-census-record-v1.schema.json",
+  "title": "Replayable universal auxiliary-coloring census graph record",
+  "description": "One generated graph with every canonical equitable partition and every configured backend/palette check. Python semantic validation additionally reconstructs every auxiliary problem and replays every witness.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_fingerprint", "index", "graph6", "graph_fingerprint",
+    "order", "size", "min_degree", "max_degree", "degree_parameter", "eligible",
+    "status", "outcome_code", "detail", "partition_count", "partitions"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.universal-census-record.v1"},
+    "run_fingerprint": {"$ref": "#/$defs/digest"},
+    "index": {"type": "integer", "minimum": 0},
+    "graph6": {"type": "string", "minLength": 1, "pattern": "^[?-~]+$"},
+    "graph_fingerprint": {"$ref": "#/$defs/digest"},
+    "order": {"type": "integer", "minimum": 0},
+    "size": {"type": "integer", "minimum": 0},
+    "min_degree": {"type": "integer", "minimum": 0},
+    "max_degree": {"type": "integer", "minimum": 0},
+    "degree_parameter": {"type": "integer", "minimum": 1},
+    "eligible": {
+      "type": "boolean",
+      "description": "Whether the graph is in the configured order/filter/auxiliary domain. Structural failures for an eligible graph abort publication instead of changing this value."
+    },
+    "status": {"enum": ["verified_all", "candidate_unsat", "unknown", "error", "skipped"]},
+    "outcome_code": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "detail": {"type": "string", "minLength": 1},
+    "partition_count": {"type": "integer", "minimum": 0},
+    "partitions": {"type": "array", "items": {"$ref": "#/$defs/partitionResult"}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"eligible": {"const": false}}, "required": ["eligible"]},
+      "then": {"properties": {"partition_count": {"const": 0}, "partitions": {"maxItems": 0}}}
+    },
+    {
+      "if": {"properties": {"status": {"const": "verified_all"}}, "required": ["status"]},
+      "then": {"properties": {"eligible": {"const": true}, "partitions": {"minItems": 1}}}
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "edge": {
+      "type": "array",
+      "prefixItems": [{"type": "integer", "minimum": 0}, {"type": "integer", "minimum": 0}],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "checkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "backend_id", "palette_offset", "color_count", "problem_digest", "status",
+        "stats", "detail", "auxiliary_edge_colors"
+      ],
+      "properties": {
+        "backend_id": {"enum": ["dsatur-iterative-v1", "static-order-iterative-v1"]},
+        "palette_offset": {"type": "integer", "minimum": 0},
+        "color_count": {"type": "integer", "minimum": 0},
+        "problem_digest": {"$ref": "#/$defs/digest"},
+        "status": {"enum": ["witness", "candidate_unsat", "unknown", "error"]},
+        "stats": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodes", "backtracks"],
+          "properties": {
+            "nodes": {"type": "integer", "minimum": 0},
+            "backtracks": {"type": "integer", "minimum": 0}
+          }
+        },
+        "detail": {"type": "string", "minLength": 1},
+        "auxiliary_edge_colors": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "array", "items": {"type": "integer", "minimum": 0}}
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "witness"}}, "required": ["status"]},
+          "then": {"properties": {"auxiliary_edge_colors": {"type": "array"}}},
+          "else": {"properties": {"auxiliary_edge_colors": {"type": "null"}}}
+        }
+      ]
+    },
+    "partitionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "partition", "auxiliary", "checks"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 0},
+        "partition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fingerprint", "pairs", "singletons"],
+          "properties": {
+            "fingerprint": {"$ref": "#/$defs/digest"},
+            "pairs": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+            "singletons": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+          }
+        },
+        "auxiliary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["graph6", "graph_fingerprint", "distinguished_edges"],
+          "properties": {
+            "graph6": {"type": "string", "minLength": 1, "pattern": "^[?-~]+$"},
+            "graph_fingerprint": {"$ref": "#/$defs/digest"},
+            "distinguished_edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}}
+          }
+        },
+        "checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/checkResult"}}
+      }
+    }
+  }
+}

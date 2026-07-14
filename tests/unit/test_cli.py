@@ -5,10 +5,17 @@ from pathlib import Path
 
 import pytest
 
+from total_coloring.backends import SolverBackend
 from total_coloring.census import CensusConfig, CensusCounts, CensusRunResult
 from total_coloring.certificates import TotalColoringCertificate
 from total_coloring.cli import EXIT_ERROR, EXIT_NO_WITNESS, EXIT_SUCCESS, EXIT_UNKNOWN, main
+from total_coloring.geng import GengError
 from total_coloring.graph import SimpleGraph
+from total_coloring.universal_census import (
+    UniversalCensusConfig,
+    UniversalCensusCounts,
+    UniversalCensusRunResult,
+)
 
 
 def write_graph(path: Path, graph: SimpleGraph) -> None:
@@ -142,7 +149,32 @@ def test_universal_auxiliary_cli_reports_all_partitions(tmp_path: Path, capsys: 
     captured = capsys.readouterr()  # type: ignore[attr-defined]
     payload = json.loads(captured.out)
     assert payload["status"] == "witness"
+    assert payload["backend_id"] == "dsatur-iterative-v1"
     assert payload["verified_partitions"] == 2
+
+
+def test_universal_auxiliary_cli_selects_static_backend(tmp_path: Path, capsys: object) -> None:
+    graph = SimpleGraph.from_edges(4, [(0, 1), (1, 2), (2, 3), (0, 3)])
+    graph_path = tmp_path / "cycle.json"
+    write_graph(graph_path, graph)
+
+    exit_code = main(
+        [
+            "aux-check-all",
+            "--graph",
+            str(graph_path),
+            "--colors",
+            "4",
+            "--backend",
+            "static-order-iterative-v1",
+        ]
+    )
+
+    assert exit_code == EXIT_SUCCESS
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    payload = json.loads(captured.out)
+    assert payload["status"] == "witness"
+    assert payload["backend_id"] == "static-order-iterative-v1"
 
 
 def test_proof_audit_exposes_failed_draft_implication(capsys: object) -> None:
@@ -354,3 +386,95 @@ def test_census_cli_maps_terminal_counts_to_exit_codes(
     payload = json.loads(captured.out)
     assert payload["counts"] == counts.to_dict()
     assert payload["status"] == "complete"
+
+
+def test_universal_census_cli_uses_default_and_custom_check_matrices(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[UniversalCensusConfig] = []
+
+    def fake_run(
+        config: UniversalCensusConfig, output: str, *, executable: str
+    ) -> UniversalCensusRunResult:
+        assert output == str(tmp_path / "run")
+        assert executable == "custom-geng"
+        seen.append(config)
+        return UniversalCensusRunResult(
+            run_fingerprint="0" * 64,
+            record_count=1,
+            partition_count=2,
+            counts=UniversalCensusCounts(verified_all=1),
+            resumed_records=0,
+            records_path=tmp_path / "run" / "records.jsonl",
+            manifest_path=tmp_path / "run" / "manifest.json",
+            completion_path=tmp_path / "run" / "completion.json",
+        )
+
+    monkeypatch.setattr("total_coloring.cli.run_universal_census", fake_run)
+    default_code = main(
+        [
+            "universal-census",
+            "--order",
+            "4",
+            "--output",
+            str(tmp_path / "run"),
+            "--geng",
+            "custom-geng",
+        ]
+    )
+    assert default_code == EXIT_SUCCESS
+    payload = json.loads(capsys.readouterr().out)  # type: ignore[attr-defined]
+    assert payload["partition_count"] == 2
+    assert len(seen[-1].checks) == 3
+
+    custom_code = main(
+        [
+            "universal-census",
+            "--order",
+            "4",
+            "--output",
+            str(tmp_path / "run"),
+            "--geng",
+            "custom-geng",
+            "--check",
+            "static:1",
+            "--check",
+            "dsatur:1",
+        ]
+    )
+    assert custom_code == EXIT_SUCCESS
+    capsys.readouterr()  # type: ignore[attr-defined]
+    assert tuple(check.backend for check in seen[-1].checks) == (
+        SolverBackend.DSATUR,
+        SolverBackend.STATIC,
+    )
+
+
+def test_universal_census_cli_reports_generator_failure_as_canonical_json(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_run(*_args: object, **_kwargs: object) -> None:
+        raise GengError("synthetic missing geng")
+
+    monkeypatch.setattr("total_coloring.cli.run_universal_census", fail_run)
+    exit_code = main(
+        [
+            "universal-census",
+            "--order",
+            "4",
+            "--output",
+            str(tmp_path / "run"),
+        ]
+    )
+
+    assert exit_code == EXIT_ERROR
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    assert captured.out == ""
+    assert json.loads(captured.err) == {
+        "error": "synthetic missing geng",
+        "status": "error",
+    }
