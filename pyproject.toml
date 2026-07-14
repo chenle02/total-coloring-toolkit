@@ -86,6 +86,7 @@ addopts = [
   "--strict-markers",
   "-ra",
 ]
+pythonpath = ["."]
 testpaths = ["tests"]
 
 [tool.coverage.run]
