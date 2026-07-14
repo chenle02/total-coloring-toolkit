@@ -446,7 +446,11 @@ def build_parser() -> argparse.ArgumentParser:
     census = commands.add_parser("census", help="run or resume one hash-pinned geng shard")
     census.add_argument("--order", type=int, required=True)
     census.add_argument("--output", required=True, help="dedicated census output directory")
-    census.add_argument("--geng", default="geng", help="geng executable name or path")
+    census.add_argument(
+        "--geng",
+        default="geng",
+        help="geng executable name or path (default auto-detects geng or nauty-geng)",
+    )
     census.add_argument("--connected", action="store_true")
     census.add_argument("--min-degree", type=int)
     census.add_argument("--max-degree", type=int)

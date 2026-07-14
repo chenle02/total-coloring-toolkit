@@ -47,8 +47,28 @@ jobs:
       - run: uv sync --locked --extra dev
       - run: uv run pytest
 
+  geng-integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          python-version: "3.11"
+          enable-cache: true
+      - name: Install nauty graph generator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nauty
+          command -v nauty-geng
+          dpkg-query -W nauty
+      - run: uv sync --locked --extra dev
+      - run: uv run pytest tests/integration/test_installed_geng.py
+
   package:
-    needs: quality
+    needs: [quality, geng-integration]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
