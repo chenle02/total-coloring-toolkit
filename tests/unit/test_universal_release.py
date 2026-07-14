@@ -65,6 +65,22 @@ def complete(order: int) -> SimpleGraph:
     )
 
 
+def order_four_geng_fixture(root: Path) -> str:
+    """Create a hermetic executable that emits the canonical order-four stream."""
+
+    executable = root / "geng-order-four-fixture"
+    executable.write_text(
+        "#!/bin/sh\n"
+        'if [ "$#" -ne 2 ] || [ "$1" != "-q" ] || [ "$2" != "4" ]; then\n'
+        "  exit 64\n"
+        "fi\n"
+        "printf '%s\\n' 'C?' 'CC' 'CE' 'CF' 'CQ' 'CU' 'CT' 'CV' 'C]' 'C^' 'C~'\n",
+        encoding="ascii",
+    )
+    executable.chmod(0o700)
+    return str(executable)
+
+
 def patch_generator(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         universal,
@@ -851,7 +867,7 @@ def test_exact_geng_replay_rejects_nonadjacent_duplicate_and_truncated_prefix(
     tmp_path: Path,
     sequence: tuple[int, ...],
 ) -> None:
-    executable = "/usr/bin/geng"
+    executable = order_four_geng_fixture(tmp_path)
     run_directory = tmp_path / "real-order-four"
     run_universal_census(
         UniversalCensusConfig(GengSpec(4)),
