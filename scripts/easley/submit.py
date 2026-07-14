@@ -555,7 +555,8 @@ def _require_immutable_code_checkout(
     expected_launcher_sha256: str,
 ) -> None:
     head = subprocess.run(
-        ["git", "-C", str(code_root), "rev-parse", "--verify", "HEAD"],
+        ["git", "rev-parse", "--verify", "HEAD"],
+        cwd=code_root,
         text=True,
         capture_output=True,
         check=False,
@@ -565,12 +566,11 @@ def _require_immutable_code_checkout(
     status = subprocess.run(
         [
             "git",
-            "-C",
-            str(code_root),
             "status",
-            "--porcelain=v1",
+            "--porcelain",
             "--untracked-files=all",
         ],
+        cwd=code_root,
         text=True,
         capture_output=True,
         check=False,

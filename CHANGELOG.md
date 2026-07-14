@@ -5,6 +5,15 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-07-14
+
+### Fixed
+
+- Run release-checkout Git commands from `cwd` instead of using `git -C`, and
+  use the legacy-compatible `git status --porcelain` spelling, so the
+  documented Easley submission works with the cluster's Git 1.8.3 after
+  loading the pinned Python module.
+
 ## [0.2.0] - 2026-07-14
 
 ### Added
@@ -60,6 +69,7 @@ All notable changes are documented here. The project follows
 - Transactional, dry-run-by-default promotion into a separate public data repo.
 - Typed CLI, strict quality gates, differential tests, and security workflows.
 
-[Unreleased]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/chenle02/total-coloring-toolkit/releases/tag/v0.1.0

@@ -416,7 +416,9 @@ def test_bootstrap_child_python_ignores_pythonpath_sitecustomize(
     assert not marker.exists()
 
 
-def test_immutable_code_checkout_binds_head_cleanliness_and_modes(tmp_path: Path) -> None:
+def test_immutable_code_checkout_binds_head_cleanliness_and_modes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     source = tmp_path / "source"
     directory = source / "scripts" / "easley"
     directory.mkdir(parents=True)
@@ -452,6 +454,32 @@ def test_immutable_code_checkout_binds_head_cleanliness_and_modes(tmp_path: Path
     for path in (directory, source / "scripts", source):
         path.chmod(0o555)
     digest = launcher_sha256(source)
+    real_run = subprocess.run
+
+    def legacy_git_compatible_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        text: bool = False,
+        capture_output: bool = False,
+        check: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        assert "-C" not in command
+        assert command in (
+            ["git", "rev-parse", "--verify", "HEAD"],
+            ["git", "status", "--porcelain", "--untracked-files=all"],
+        )
+        assert cwd == source
+        assert text
+        return real_run(
+            command,
+            cwd=cwd,
+            text=True,
+            capture_output=capture_output,
+            check=check,
+        )
+
+    monkeypatch.setattr("scripts.easley.submit.subprocess.run", legacy_git_compatible_run)
 
     _require_immutable_code_checkout(source, commit, digest)
 
