@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/census-manifest-v1.schema.json",
+  "title": "Completed total-coloring census manifest",
+  "description": "Immutable provenance, status counts, and artifact hashes for one completely consumed geng shard.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_fingerprint",
+    "complete",
+    "record_count",
+    "counts",
+    "provenance",
+    "artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.census-manifest.v1"},
+    "run_fingerprint": {"$ref": "#/$defs/digest"},
+    "complete": {"const": true},
+    "record_count": {"type": "integer", "minimum": 0},
+    "counts": {"$ref": "#/$defs/counts"},
+    "provenance": {"$ref": "#/$defs/provenance"},
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records_path", "records_sha256", "records_bytes"],
+      "properties": {
+        "records_path": {"const": "records.jsonl"},
+        "records_sha256": {"$ref": "#/$defs/digest"},
+        "records_bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableNonnegativeInteger": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "nullablePositiveInteger": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["witness", "candidate_unsat", "unknown", "error", "skipped"],
+      "properties": {
+        "witness": {"type": "integer", "minimum": 0},
+        "candidate_unsat": {"type": "integer", "minimum": 0},
+        "unknown": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "generatorSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order",
+        "connected",
+        "min_degree",
+        "max_degree",
+        "shard_index",
+        "shard_count"
+      ],
+      "properties": {
+        "order": {"type": "integer", "minimum": 0},
+        "connected": {"type": "boolean"},
+        "min_degree": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "max_degree": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "shard_index": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+        "shard_count": {"$ref": "#/$defs/nullablePositiveInteger"}
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generator_spec",
+        "color_offset_from_degree_parameter",
+        "filters",
+        "search",
+        "checkpoint_interval"
+      ],
+      "properties": {
+        "generator_spec": {"$ref": "#/$defs/generatorSpec"},
+        "color_offset_from_degree_parameter": {"type": "integer", "minimum": 0},
+        "checkpoint_interval": {"type": "integer", "minimum": 1},
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["require_high_degree"],
+          "properties": {"require_high_degree": {"type": "boolean"}}
+        },
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "backend",
+            "max_nodes_per_partition",
+            "max_partitions",
+            "timeout_seconds_per_partition"
+          ],
+          "properties": {
+            "backend": {"const": "dsatur-iterative-v1"},
+            "max_nodes_per_partition": {"$ref": "#/$defs/nullablePositiveInteger"},
+            "max_partitions": {"$ref": "#/$defs/nullablePositiveInteger"},
+            "timeout_seconds_per_partition": {
+              "type": ["number", "null"],
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config", "generator", "shard", "toolkit"],
+      "properties": {
+        "config": {"$ref": "#/$defs/config"},
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "executable", "sha256", "arguments"],
+          "properties": {
+            "name": {"const": "nauty-geng"},
+            "executable": {
+              "type": "string",
+              "pattern": "^(?!\\.{1,2}$)[^/\\\\\\u0000-\\u001F]+$"
+            },
+            "sha256": {"$ref": "#/$defs/digest"},
+            "arguments": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "shard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["index", "count"],
+          "properties": {
+            "index": {"type": "integer", "minimum": 0},
+            "count": {"type": "integer", "minimum": 1}
+          }
+        },
+        "toolkit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "distribution_version",
+            "source_sha256",
+            "python_implementation",
+            "python_version"
+          ],
+          "properties": {
+            "distribution_version": {"type": "string", "minLength": 1},
+            "source_sha256": {"$ref": "#/$defs/digest"},
+            "python_implementation": {"type": "string", "minLength": 1},
+            "python_version": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}

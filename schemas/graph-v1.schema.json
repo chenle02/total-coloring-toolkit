@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/graph-v1.schema.json",
+  "title": "Canonical numbered simple graph",
+  "description": "A finite simple undirected graph on vertices 0 through order-1. Semantic validation additionally requires u < v, lexicographically sorted unique edges, and endpoints below order.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "order", "edges"],
+  "properties": {
+    "schema_version": {
+      "const": "total-coloring.simple-graph.v1"
+    },
+    "order": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "array",
+        "prefixItems": [
+          {"type": "integer", "minimum": 0},
+          {"type": "integer", "minimum": 0}
+        ],
+        "minItems": 2,
+        "maxItems": 2
+      }
+    }
+  }
+}

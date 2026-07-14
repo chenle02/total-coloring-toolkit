@@ -1,0 +1,124 @@
+[build-system]
+requires = ["hatchling==1.31.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "total-coloring-toolkit"
+version = "0.1.0"
+description = "Exact, proof-carrying verification and search tools for total graph coloring"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Le Chen" },
+  { name = "Songling Shan" },
+]
+keywords = [
+  "combinatorics",
+  "graph-coloring",
+  "reproducible-research",
+  "total-coloring",
+  "verification",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Mathematics",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+networkx = ["networkx>=3.2"]
+dev = [
+  "build>=1.2.2",
+  "hypothesis>=6.125",
+  "jsonschema>=4.23",
+  "mypy>=1.15",
+  "networkx>=3.2",
+  "pytest>=8.3",
+  "pytest-cov>=6.0",
+  "ruff>=0.11",
+  "twine>=6.1",
+]
+
+[project.scripts]
+total-coloring = "total_coloring.cli:main"
+
+[project.urls]
+Documentation = "https://github.com/chenle02/total-coloring-toolkit#readme"
+Issues = "https://github.com/chenle02/total-coloring-toolkit/issues"
+Repository = "https://github.com/chenle02/total-coloring-toolkit"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/schemas",
+  "/scripts",
+  "/docs",
+  "/tests",
+  "/LICENSE",
+  "/CHANGELOG.md",
+  "/CITATION.cff",
+  "/CODE_OF_CONDUCT.md",
+  "/CONTRIBUTING.md",
+  "/README.md",
+  "/SECURITY.md",
+  "/pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/total_coloring"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "total_coloring/_schemas"
+
+[tool.pytest.ini_options]
+addopts = [
+  "--strict-config",
+  "--strict-markers",
+  "-ra",
+]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["total_coloring"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+skip_covered = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+  "raise NotImplementedError",
+]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["scripts", "src", "tests"]
+warn_unreachable = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "PERF", "RUF", "SIM", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"

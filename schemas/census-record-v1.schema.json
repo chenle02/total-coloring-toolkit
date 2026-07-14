@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/census-record-v1.schema.json",
+  "title": "Total-coloring census graph result",
+  "description": "One input graph classified exactly once. A witness record embeds both an independently checkable auxiliary rainbow-edge-coloring witness and its decoded total-coloring certificate; candidate_unsat is not a proof of infeasibility.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_fingerprint",
+    "index",
+    "graph6",
+    "graph_fingerprint",
+    "order",
+    "size",
+    "min_degree",
+    "max_degree",
+    "degree_parameter",
+    "color_count",
+    "status",
+    "outcome_code",
+    "detail",
+    "partitions_started",
+    "partitions_completed",
+    "candidate_failures",
+    "unknown_partitions",
+    "certificate",
+    "auxiliary_witness"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.census-record.v1"},
+    "run_fingerprint": {"$ref": "#/$defs/digest"},
+    "index": {"type": "integer", "minimum": 0},
+    "graph6": {"type": "string", "minLength": 1, "pattern": "^[?-~]+$"},
+    "graph_fingerprint": {"$ref": "#/$defs/digest"},
+    "order": {"type": "integer", "minimum": 0},
+    "size": {"type": "integer", "minimum": 0},
+    "min_degree": {"type": "integer", "minimum": 0},
+    "max_degree": {"type": "integer", "minimum": 0},
+    "degree_parameter": {"type": "integer", "minimum": 1},
+    "color_count": {"type": "integer", "minimum": 0},
+    "status": {
+      "enum": ["witness", "candidate_unsat", "unknown", "error", "skipped"]
+    },
+    "outcome_code": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "detail": {"type": "string", "minLength": 1},
+    "partitions_started": {"type": "integer", "minimum": 0},
+    "partitions_completed": {"type": "integer", "minimum": 0},
+    "candidate_failures": {"type": "integer", "minimum": 0},
+    "unknown_partitions": {"type": "integer", "minimum": 0},
+    "certificate": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/certificate"}
+      ]
+    },
+    "auxiliary_witness": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/auxiliaryWitness"}
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "witness"}}},
+      "then": {
+        "properties": {
+          "certificate": {"$ref": "#/$defs/certificate"},
+          "auxiliary_witness": {"$ref": "#/$defs/auxiliaryWitness"}
+        }
+      },
+      "else": {
+        "properties": {
+          "certificate": {"type": "null"},
+          "auxiliary_witness": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "skipped"}}},
+      "then": {
+        "properties": {
+          "partitions_started": {"const": 0},
+          "partitions_completed": {"const": 0},
+          "candidate_failures": {"const": 0},
+          "unknown_partitions": {"const": 0}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "edge": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 0}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "auxiliaryWitness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "partition",
+        "auxiliary_graph6",
+        "distinguished_edges",
+        "auxiliary_edge_colors"
+      ],
+      "properties": {
+        "schema_version": {"const": "total-coloring.census-auxiliary-witness.v1"},
+        "partition": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pairs", "singletons"],
+          "properties": {
+            "pairs": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+            "singletons": {
+              "type": "array",
+              "items": {"type": "integer", "minimum": 0}
+            }
+          }
+        },
+        "auxiliary_graph6": {"type": "string", "minLength": 1, "pattern": "^[?-~]+$"},
+        "distinguished_edges": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/edge"}
+        },
+        "auxiliary_edge_colors": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "certificate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "graph_fingerprint",
+        "palette_size",
+        "vertex_colors",
+        "edge_colors"
+      ],
+      "properties": {
+        "schema_version": {"const": "total-coloring.certificate.v1"},
+        "kind": {"const": "total-coloring"},
+        "graph_fingerprint": {"$ref": "#/$defs/digest"},
+        "palette_size": {"type": "integer", "minimum": 0},
+        "vertex_colors": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        },
+        "edge_colors": {
+          "type": "array",
+          "items": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}

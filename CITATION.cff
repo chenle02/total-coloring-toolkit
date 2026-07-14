@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the software release and associated dataset."
+title: "Total Coloring Toolkit"
+type: software
+version: 0.1.0
+authors:
+  - family-names: Chen
+    given-names: Le
+  - family-names: Shan
+    given-names: Songling
+repository-code: "https://github.com/chenle02/total-coloring-toolkit"
+url: "https://github.com/chenle02/total-coloring-toolkit"
+license: MIT
+keywords:
+  - combinatorics
+  - graph coloring
+  - reproducible research
+  - total coloring
+  - verification

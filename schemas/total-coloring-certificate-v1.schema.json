@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/total-coloring-certificate-v1.schema.json",
+  "title": "Total-coloring witness certificate",
+  "description": "A color assignment bound to a canonical numbered graph. vertex_colors is indexed by vertex; edge_colors is aligned with the graph's lexicographically sorted edge array.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "graph_fingerprint",
+    "palette_size",
+    "vertex_colors",
+    "edge_colors"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "total-coloring.certificate.v1"
+    },
+    "kind": {
+      "const": "total-coloring"
+    },
+    "graph_fingerprint": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "palette_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "vertex_colors": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "edge_colors": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0}
+    }
+  }
+}

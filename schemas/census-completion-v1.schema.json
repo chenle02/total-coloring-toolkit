@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/census-completion-v1.schema.json",
+  "title": "Total-coloring census completion marker",
+  "description": "Written last, after full generator consumption and durable publication of records and manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_fingerprint",
+    "manifest_sha256",
+    "records_sha256",
+    "record_count"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.census-completion.v1"},
+    "run_fingerprint": {"$ref": "#/$defs/digest"},
+    "manifest_sha256": {"$ref": "#/$defs/digest"},
+    "records_sha256": {"$ref": "#/$defs/digest"},
+    "record_count": {"type": "integer", "minimum": 0}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}
