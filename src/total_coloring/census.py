@@ -50,6 +50,7 @@ CENSUS_MANIFEST_SCHEMA_VERSION: Final = "total-coloring.census-manifest.v1"
 CENSUS_COMPLETION_SCHEMA_VERSION: Final = "total-coloring.census-completion.v1"
 CENSUS_BACKEND_ID: Final = "dsatur-iterative-v1"
 AUXILIARY_WITNESS_SCHEMA_VERSION: Final = "total-coloring.census-auxiliary-witness.v1"
+MAX_CENSUS_METADATA_BYTES: Final = 4 * 1024 * 1024
 
 _RECORDS_NAME: Final = "records.jsonl"
 _PARTIAL_NAME: Final = ".records.jsonl.partial"
@@ -1025,7 +1026,10 @@ def _exclusive_output_lock(directory: Path) -> Iterator[None]:
 
 
 def _load_canonical_json(path: Path) -> Mapping[str, object]:
-    raw = path.read_bytes()
+    with path.open("rb") as handle:
+        raw = handle.read(MAX_CENSUS_METADATA_BYTES + 1)
+    if len(raw) > MAX_CENSUS_METADATA_BYTES:
+        raise CensusFormatError(f"{path.name} exceeds {MAX_CENSUS_METADATA_BYTES} metadata bytes")
     if not raw.endswith(b"\n"):
         raise CensusFormatError(f"{path.name} must end with one LF")
     try:
@@ -1374,6 +1378,7 @@ __all__ = [
     "CENSUS_COMPLETION_SCHEMA_VERSION",
     "CENSUS_MANIFEST_SCHEMA_VERSION",
     "CENSUS_RECORD_SCHEMA_VERSION",
+    "MAX_CENSUS_METADATA_BYTES",
     "CensusAuxiliaryWitness",
     "CensusConfig",
     "CensusCounts",

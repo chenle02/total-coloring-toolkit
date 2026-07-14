@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final, cast
@@ -18,6 +19,9 @@ Edge = tuple[int, int]
 
 GRAPH_SCHEMA_VERSION: Final = "total-coloring.simple-graph.v1"
 DEFAULT_MAX_JSON_ORDER: Final = 100_000
+DEFAULT_MAX_JSON_BYTES: Final = 16 * 1024 * 1024
+DEFAULT_MAX_JSON_DEPTH: Final = 128
+DEFAULT_MAX_JSON_INTEGER_DIGITS: Final = 128
 _GRAPH_KEYS: Final = frozenset({"schema_version", "order", "edges"})
 
 
@@ -49,9 +53,9 @@ def canonical_json_bytes(value: object) -> bytes:
             separators=(",", ":"),
             sort_keys=True,
         )
-    except (TypeError, ValueError) as exc:
+        return text.encode("utf-8")
+    except (TypeError, ValueError, RecursionError, UnicodeError) as exc:
         raise GraphFormatError("value is not canonical-JSON serializable") from exc
-    return text.encode("utf-8")
 
 
 def sha256_hex(value: object) -> str:
@@ -73,20 +77,97 @@ def _reject_json_constant(value: str) -> None:
     raise GraphFormatError(f"non-finite JSON number is forbidden: {value}")
 
 
-def strict_json_loads(data: str | bytes) -> object:
-    """Parse one JSON value while rejecting duplicate keys and NaN/Infinity."""
+def _bounded_json_int(value: str, *, max_digits: int) -> int:
+    digits = value[1:] if value.startswith("-") else value
+    if len(digits) > max_digits:
+        raise GraphFormatError(f"JSON integer exceeds {max_digits} digits")
+    return int(value)
+
+
+def _finite_json_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise GraphFormatError(f"non-finite JSON number is forbidden: {value}")
+    return parsed
+
+
+def _reject_json_surrogates(value: object) -> None:
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if any(0xD800 <= ord(character) <= 0xDFFF for character in item):
+                raise GraphFormatError("JSON strings may not contain surrogate code points")
+        elif isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
+
+
+def _validate_json_nesting(text: str, *, max_depth: int) -> None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > max_depth:
+                raise GraphFormatError(f"JSON nesting exceeds {max_depth} levels")
+        elif character in "]}":
+            depth -= 1
+
+
+def strict_json_loads(
+    data: str | bytes,
+    *,
+    max_bytes: int = DEFAULT_MAX_JSON_BYTES,
+    max_depth: int = DEFAULT_MAX_JSON_DEPTH,
+    max_integer_digits: int = DEFAULT_MAX_JSON_INTEGER_DIGITS,
+) -> object:
+    """Parse bounded JSON while rejecting duplicate keys and non-finite numbers."""
 
     if not isinstance(data, str | bytes):
         raise GraphFormatError("JSON input must be str or bytes")
+    if not all(
+        isinstance(limit, int) and not isinstance(limit, bool) and limit > 0
+        for limit in (max_bytes, max_depth, max_integer_digits)
+    ):
+        raise GraphFormatError("JSON parser limits must be positive integers")
     try:
+        if isinstance(data, bytes):
+            if len(data) > max_bytes:
+                raise GraphFormatError(f"JSON input exceeds {max_bytes} bytes")
+            text = data.decode("utf-8")
+        else:
+            if len(data) > max_bytes:
+                raise GraphFormatError(f"JSON input exceeds {max_bytes} bytes")
+            encoded = data.encode("utf-8")
+            if len(encoded) > max_bytes:
+                raise GraphFormatError(f"JSON input exceeds {max_bytes} bytes")
+            text = data
+        _validate_json_nesting(text, max_depth=max_depth)
         parsed: object = json.loads(
-            data,
+            text,
             object_pairs_hook=_reject_duplicate_object_pairs,
             parse_constant=_reject_json_constant,
+            parse_float=_finite_json_float,
+            parse_int=lambda value: _bounded_json_int(value, max_digits=max_integer_digits),
         )
+        _reject_json_surrogates(parsed)
     except GraphFormatError:
         raise
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as exc:
+    except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError) as exc:
         raise GraphFormatError("invalid JSON") from exc
     return parsed
 
@@ -361,6 +442,9 @@ class SimpleGraph:
 
 
 __all__ = [
+    "DEFAULT_MAX_JSON_BYTES",
+    "DEFAULT_MAX_JSON_DEPTH",
+    "DEFAULT_MAX_JSON_INTEGER_DIGITS",
     "DEFAULT_MAX_JSON_ORDER",
     "GRAPH_SCHEMA_VERSION",
     "Edge",

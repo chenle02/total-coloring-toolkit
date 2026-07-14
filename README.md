@@ -149,6 +149,39 @@ also its verification operation: it checks hashes and canonical schemas,
 replays every stored witness, regenerates the configured `geng` stream, and
 compares graph6, fingerprint, index, and end-of-stream coverage exactly.
 
+After every per-order run is complete, prepare the reviewed public-data
+candidate and its separate deterministic replay archive. This command is
+strictly offline: it replays every witness, regenerates every `geng` stream,
+requires one unrestricted unsharded run per order, and rejects mixed identities
+or adverse statuses before writing either final output.
+
+```bash
+total-coloring universal-export \
+  --run runs/order-01 --run runs/order-02 --run runs/order-03 \
+  --bundle candidates/order-1-3-v1 \
+  --archive release-assets/order-1-3-universal-census-replay-v1.tar.gz \
+  --summary-id order-1-3-universal-census \
+  --created-utc 2026-07-14T12:00:00Z \
+  --release-version 1.0.0-rc.1 \
+  --code-commit 61c576fba28a03a91f6a7695e21d130cd7e76f22 \
+  --external-name archives/order-1-3-universal-census-replay-v1.tar.gz \
+  --external-url https://github.com/OWNER/REPO/releases/download/TAG/ASSET.tar.gz
+```
+
+The compact bundle contains the version-2 dataset manifest, one finite-scope
+summary, exact schema bytes, and `SHA256SUMS`. The large archive remains an
+external release asset. `PublicationConfig.external_files` makes the existing
+dry-run-by-default promotion layer validate the supplied archive, all member
+receipts, and the finite claim before any Git worktree is changed.
+
+Both write paths fail closed on concurrent pathname changes. Export installs
+the archive before the bundle, and ordinary exceptions roll back only entries
+whose inode identities still belong to the transaction. A process or power
+loss between the two durable renames can therefore leave an archive-only
+candidate. Public promotion likewise provides identity-owned rollback for
+ordinary process failures, but a multi-file Git worktree update is not
+power-loss atomic; inspect or re-plan after an interrupted machine-level write.
+
 Audit the draft's smallest `c=2`, `P=Q=1` arithmetic case:
 
 ```bash
@@ -168,7 +201,7 @@ current conjectural extension statements, and corrected proof obligations.
 
 ## Schema resources
 
-The eight public JSON schemas are part of both the source distribution and the
+The ten public JSON schemas are part of both the source distribution and the
 wheel. Applications should use the typed API instead of assuming a repository
 layout:
 

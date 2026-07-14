@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chenle02.github.io/total-coloring-data/schemas/dataset-manifest-v2.schema.json",
+  "title": "Total Coloring Dataset Manifest with External Artifacts",
+  "description": "Complete local inventory and immutable external-artifact bindings for one curated dataset release. External artifacts are not part of the managed-root or SHA256SUMS inventory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "dataset",
+    "release",
+    "managed_roots",
+    "artifacts",
+    "external_artifacts"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/dataset-manifest-v2.schema.json"
+    },
+    "schema_version": {
+      "const": "2.0.0"
+    },
+    "dataset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "license", "repository"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "const": "CC-BY-4.0"
+        },
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "status",
+        "created_utc",
+        "code_repository",
+        "code_commit"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(?![\\s\\S])"
+        },
+        "status": {
+          "enum": ["development", "candidate", "published"]
+        },
+        "created_utc": {
+          "type": "string",
+          "format": "utc-date-time"
+        },
+        "code_repository": {
+          "type": "string",
+          "format": "uri"
+        },
+        "code_commit": {
+          "type": "string",
+          "pattern": "^(?:UNSET|(?!0{40}$)[0-9a-f]{40})$"
+        }
+      }
+    },
+    "managed_roots": {
+      "type": "array",
+      "const": ["reports", "results"]
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "role",
+          "media_type",
+          "bytes",
+          "sha256",
+          "description"
+        ],
+        "properties": {
+          "path": {
+            "type": "string",
+            "format": "relative-path"
+          },
+          "role": {
+            "enum": ["result", "report", "certificate", "fixture"]
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "format": "sha256"
+          },
+          "schema": {
+            "type": "string",
+            "format": "relative-path"
+          },
+          "records": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "external_artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "url",
+          "media_type",
+          "bytes",
+          "sha256",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "format": "relative-path"
+          },
+          "url": {
+            "type": "string",
+            "format": "https-uri"
+          },
+          "media_type": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "format": "sha256"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

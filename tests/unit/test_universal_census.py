@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
+import shutil
 from collections.abc import Callable, Iterator
 from dataclasses import replace
 from pathlib import Path
@@ -41,9 +43,19 @@ from total_coloring.universal_census import (
     UniversalPartitionResult,
     count_equitable_partitions_dp,
     run_universal_census,
+    validate_completed_universal_census,
+    validate_completed_universal_transcript,
 )
 
 TEST_TOOLKIT = ToolkitIdentity("test", "b" * 64, "CPython", "3.13.0")
+
+
+class _MalformedRecordStream:
+    def __init__(self, value: object) -> None:
+        self.value = value
+
+    def readline(self, _limit: int) -> object:
+        return self.value
 
 
 def cycle(order: int) -> SimpleGraph:
@@ -263,6 +275,154 @@ def test_same_inputs_produce_byte_identical_artifacts(
     assert first.records_path.read_bytes() == second.records_path.read_bytes()
     assert first.manifest_path.read_bytes() == second.manifest_path.read_bytes()
     assert first.completion_path.read_bytes() == second.completion_path.read_bytes()
+
+
+def test_public_completed_run_validation_reconstructs_provenance_read_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_generator(monkeypatch, (cycle(4), complete(4)))
+    run_directory = tmp_path / "run"
+    expected = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        run_directory,
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    before = {path.name: path.read_bytes() for path in run_directory.iterdir()}
+
+    validated = validate_completed_universal_census(run_directory)
+
+    assert validated.result == replace(expected, resumed_records=expected.record_count)
+    assert validated.config == UniversalCensusConfig(GengSpec(4))
+    assert validated.generator == GengIdentity("geng", "a" * 64, ("-q", "4"))
+    assert validated.toolkit == TEST_TOOLKIT
+    assert {path.name: path.read_bytes() for path in run_directory.iterdir()} == before
+    assert not (run_directory / ".census.lock").exists()
+
+
+def test_public_completed_run_validation_rejects_provenance_and_generator_tampering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    run_directory = tmp_path / "run"
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        run_directory,
+        toolkit_identity=TEST_TOOLKIT,
+    )
+
+    monkeypatch.setattr(
+        universal,
+        "geng_identity",
+        lambda spec, *, executable="geng": GengIdentity("geng", "f" * 64, spec.arguments()),
+    )
+    with pytest.raises(CensusFormatError, match="local geng identity"):
+        validate_completed_universal_census(run_directory)
+
+    patch_generator(monkeypatch, (cycle(4),))
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    manifest["provenance"]["config"]["fix_distinguished_colors"] = False
+    result.manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
+    with pytest.raises(CensusFormatError, match="must fix distinguished"):
+        validate_completed_universal_census(run_directory)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda value: value["provenance"].update(objective="wrong"), "objective"),
+        (lambda value: value["provenance"].update(config=[]), "components"),
+        (
+            lambda value: value["provenance"]["config"].pop("checkpoint_interval"),
+            "universal config",
+        ),
+        (
+            lambda value: value["provenance"]["config"].update(partition_enumerator="wrong"),
+            "partition enumerator",
+        ),
+        (
+            lambda value: value["provenance"]["config"].update(generator_spec=[]),
+            "components",
+        ),
+        (lambda value: value["provenance"]["config"].update(checks="bad"), "checks"),
+        (
+            lambda value: value["provenance"]["config"]["generator_spec"].pop("order"),
+            "generator spec",
+        ),
+        (
+            lambda value: value["provenance"]["config"]["filters"].update(extra=True),
+            "filters",
+        ),
+        (
+            lambda value: value["provenance"]["config"]["search_limits"].update(extra=None),
+            "search limits",
+        ),
+        (
+            lambda value: value["provenance"]["config"].update(checks=[1]),
+            r"checks\[0\]",
+        ),
+        (
+            lambda value: value["provenance"]["config"]["search_limits"].update(
+                max_nodes_per_check=0
+            ),
+            "max_nodes_per_check",
+        ),
+        (
+            lambda value: value["provenance"]["config"]["search_limits"].update(
+                timeout_seconds_per_check="bad"
+            ),
+            "timeout_seconds",
+        ),
+        (
+            lambda value: value["provenance"]["config"]["generator_spec"].update(connected=1),
+            "connected",
+        ),
+        (lambda value: value["provenance"]["generator"].update(name="wrong"), "name"),
+        (
+            lambda value: value["provenance"]["generator"].update(arguments="bad"),
+            "arguments",
+        ),
+        (
+            lambda value: value["provenance"]["generator"].update(arguments=[1]),
+            "arguments must be strings",
+        ),
+        (
+            lambda value: value["provenance"]["generator"].update(executable="a/b"),
+            "portable basename",
+        ),
+        (
+            lambda value: value["provenance"]["generator"].update(arguments=["-q", "5"]),
+            "do not match",
+        ),
+        (lambda value: value["provenance"]["shard"].update(count=2), "shard envelope"),
+        (
+            lambda value: value["provenance"]["toolkit"].pop("python_version"),
+            "toolkit identity",
+        ),
+        (
+            lambda value: value["provenance"]["toolkit"].update(source_sha256="bad"),
+            "source_sha256",
+        ),
+    ],
+)
+def test_public_completed_run_validation_rejects_malformed_provenance_components(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: Callable[[dict[str, Any]], object],
+    message: str,
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    pristine = tmp_path / "pristine"
+    run_universal_census(
+        UniversalCensusConfig(GengSpec(4)), pristine, toolkit_identity=TEST_TOOLKIT
+    )
+    candidate = tmp_path / "candidate"
+    shutil.copytree(pristine, candidate)
+    manifest_path = candidate / "manifest.json"
+    manifest = cast(dict[str, Any], json.loads(manifest_path.read_text(encoding="utf-8")))
+    mutation(manifest)
+    manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
+    with pytest.raises(CensusFormatError, match=message):
+        validate_completed_universal_census(candidate)
 
 
 def test_generator_interruption_resumes_without_rechecking_completed_graph(
@@ -493,6 +653,164 @@ def test_completed_artifact_tampering_and_lock_fail_closed(
         run_universal_census(config, locked, toolkit_identity=TEST_TOOLKIT)
 
 
+@pytest.mark.parametrize(
+    "stream",
+    [io.StringIO("not bytes\n"), _MalformedRecordStream(1), _MalformedRecordStream(None)],
+)
+def test_embedded_transcript_rejects_nonbinary_stream_results(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    stream: object,
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        tmp_path / "binary-run",
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    with pytest.raises(CensusFormatError, match="exact bytes"):
+        validate_completed_universal_transcript(
+            result.manifest_path.read_bytes(),
+            result.completion_path.read_bytes(),
+            stream,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("target", "mutation", "message"),
+    [
+        ("manifest", lambda value: value.update(schema_version="bad"), "manifest version"),
+        ("manifest", lambda value: value.update(complete=False), "completion state"),
+        (
+            "completion",
+            lambda value: value.update(schema_version="bad"),
+            "completion schema_version",
+        ),
+        ("manifest", lambda value: value.update(provenance=[]), "provenance must be an object"),
+        (
+            "manifest",
+            lambda value: value.update(run_fingerprint="f" * 64),
+            "run_fingerprint",
+        ),
+        ("manifest", lambda value: value.update(artifacts=[]), "artifacts and counts"),
+        ("manifest", lambda value: value.update(counts=[]), "artifacts and counts"),
+        (
+            "manifest",
+            lambda value: value["artifacts"].update(records_bytes=999),
+            "artifact size or digest",
+        ),
+        ("manifest", lambda value: value.update(record_count=2), "manifest counts"),
+        ("manifest", lambda value: value.update(partition_count=99), "manifest counts"),
+        (
+            "manifest",
+            lambda value: value["counts"].update(verified_all=0, skipped=1),
+            "manifest counts",
+        ),
+        (
+            "completion",
+            lambda value: value.update(records_sha256="f" * 64),
+            "completion marker",
+        ),
+    ],
+)
+def test_embedded_transcript_rejects_each_envelope_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    target: str,
+    mutation: Callable[[dict[str, Any]], object],
+    message: str,
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        tmp_path / "envelope-run",
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    manifest = cast(dict[str, Any], json.loads(result.manifest_path.read_text(encoding="utf-8")))
+    completion = cast(
+        dict[str, Any], json.loads(result.completion_path.read_text(encoding="utf-8"))
+    )
+    mutation(manifest if target == "manifest" else completion)
+
+    with pytest.raises(CensusFormatError, match=message):
+        validate_completed_universal_transcript(
+            canonical_json_bytes(manifest) + b"\n",
+            canonical_json_bytes(completion) + b"\n",
+            io.BytesIO(result.records_path.read_bytes()),
+        )
+
+
+@pytest.mark.parametrize(
+    ("records_factory", "message"),
+    [
+        (lambda _record: b"{\n", "invalid universal record"),
+        (lambda _record: b"[]\n", "must be an object"),
+        (lambda _record: b"{}\n", "order must equal"),
+        (lambda record: canonical_json_bytes(record), "unterminated record"),
+        (
+            lambda record: json.dumps(record, sort_keys=True).encode("utf-8") + b"\n",
+            "not canonical",
+        ),
+        (
+            lambda record: canonical_json_bytes({**record, "index": 1}) + b"\n",
+            "discontinuous or foreign",
+        ),
+    ],
+)
+def test_embedded_transcript_rejects_malformed_record_streams(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    records_factory: Callable[[dict[str, Any]], bytes],
+    message: str,
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        tmp_path / "record-run",
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    record = cast(
+        dict[str, Any],
+        json.loads(result.records_path.read_text(encoding="utf-8").splitlines()[0]),
+    )
+    with pytest.raises(CensusFormatError, match=message):
+        validate_completed_universal_transcript(
+            result.manifest_path.read_bytes(),
+            result.completion_path.read_bytes(),
+            io.BytesIO(records_factory(record)),
+        )
+
+
+@pytest.mark.parametrize(
+    ("regenerated", "message"),
+    [
+        ((), "ended before"),
+        ((cast(SimpleGraph, object()),), "non-graph item"),
+        ((complete(4),), "disagrees with completed record"),
+        ((cycle(4), complete(4)), "extra graph"),
+    ],
+)
+def test_embedded_transcript_rejects_generator_coverage_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    regenerated: tuple[SimpleGraph, ...],
+    message: str,
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4)),
+        tmp_path / "generator-run",
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    with pytest.raises(CensusFormatError, match=message):
+        universal._validate_universal_census_transcript(
+            result.manifest_path.read_bytes(),
+            result.completion_path.read_bytes(),
+            io.BytesIO(result.records_path.read_bytes()),
+            regenerated=iter(regenerated),
+        )
+
+
 def test_completed_validation_regenerates_stream_through_exact_eof(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -695,6 +1013,12 @@ def test_public_value_objects_and_parsers_fail_closed_on_malformed_inputs(tmp_pa
     bad_color["color_count"] = -1
     with pytest.raises(CensusFormatError, match="invalid universal check"):
         UniversalCheckResult.from_mapping(bad_color)
+    for field in ("palette_offset", "color_count"):
+        for invalid_number in (True, 1.0):
+            malformed_check = copy.deepcopy(check_dict)
+            malformed_check[field] = invalid_number
+            with pytest.raises(CensusFormatError, match="invalid universal check"):
+                UniversalCheckResult.from_mapping(malformed_check)
 
     assert UniversalPartitionResult.from_mapping(partition.to_dict()) == partition
     invalid_partitions: tuple[Callable[[], object], ...] = (
@@ -738,6 +1062,17 @@ def test_public_value_objects_and_parsers_fail_closed_on_malformed_inputs(tmp_pa
     bad_record_status["status"] = "bad"
     with pytest.raises(CensusFormatError, match="invalid universal census status"):
         UniversalCensusRecord.from_dict(bad_record_status)
+    for field in ("index", "order"):
+        for invalid_number in (True, 4.0):
+            malformed_record = copy.deepcopy(record_dict)
+            malformed_record[field] = invalid_number
+            with pytest.raises(CensusFormatError, match="invalid universal census record"):
+                UniversalCensusRecord.from_dict(malformed_record)
+    wrong_color_relation = copy.deepcopy(record_dict)
+    nested_check = wrong_color_relation["partitions"][0]["checks"][0]
+    nested_check["color_count"] += 1
+    with pytest.raises(CensusFormatError, match="color count does not equal D"):
+        UniversalCensusRecord.from_dict(wrong_color_relation)
     with pytest.raises(CensusFormatError, match="JSON object"):
         UniversalCensusRecord.from_json("[]")
     with pytest.raises(CensusFormatError, match="invalid JSON"):

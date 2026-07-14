@@ -16,6 +16,7 @@ from total_coloring.universal_census import (
     UniversalCensusCounts,
     UniversalCensusRunResult,
 )
+from total_coloring.universal_release import UniversalReleaseConfig, UniversalReleaseResult
 
 
 def write_graph(path: Path, graph: SimpleGraph) -> None:
@@ -450,6 +451,65 @@ def test_universal_census_cli_uses_default_and_custom_check_matrices(
         SolverBackend.DSATUR,
         SolverBackend.STATIC,
     )
+
+
+def test_universal_export_cli_maps_release_metadata(
+    tmp_path: Path,
+    capsys: object,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_export(
+        runs: list[str], config: UniversalReleaseConfig, *, executable: str
+    ) -> UniversalReleaseResult:
+        assert runs == ["run-2", "run-3"]
+        assert executable == "custom-geng"
+        assert config.code_commit == "c" * 40
+        assert config.expected_toolkit_source_sha256 == "b" * 64
+        return UniversalReleaseResult(
+            bundle_root=config.bundle_root,
+            archive_path=config.archive_path,
+            summary_path=config.bundle_root / "results/summary.json",
+            manifest_path=config.bundle_root / "manifests/dataset-manifest.json",
+            archive_bytes=123,
+            archive_sha256="a" * 64,
+            orders=(2, 3),
+            totals={"record_count": 6},
+        )
+
+    monkeypatch.setattr("total_coloring.cli.export_universal_release", fake_export)
+    code = main(
+        [
+            "universal-export",
+            "--run",
+            "run-2",
+            "--run",
+            "run-3",
+            "--bundle",
+            str(tmp_path / "bundle"),
+            "--archive",
+            str(tmp_path / "archive.tar.gz"),
+            "--summary-id",
+            "order-2-3-universal-census",
+            "--created-utc",
+            "2026-07-14T12:00:00Z",
+            "--release-version",
+            "1.0.0-rc.1",
+            "--code-commit",
+            "c" * 40,
+            "--external-name",
+            "archives/replay.tar.gz",
+            "--external-url",
+            "https://example.org/releases/replay.tar.gz",
+            "--expected-toolkit-source-sha256",
+            "b" * 64,
+            "--geng",
+            "custom-geng",
+        ]
+    )
+    assert code == EXIT_SUCCESS
+    payload = json.loads(capsys.readouterr().out)  # type: ignore[attr-defined]
+    assert payload["orders"] == [2, 3]
+    assert payload["archive_sha256"] == "a" * 64
 
 
 def test_universal_census_cli_reports_generator_failure_as_canonical_json(

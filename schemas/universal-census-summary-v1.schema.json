@@ -1,0 +1,519 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chenle02.github.io/total-coloring-data/schemas/universal-census-summary-v1.schema.json",
+  "title": "Bounded Universal Total-Coloring Census Summary",
+  "description": "Compact finite-scope summary for completed universal auxiliary-extension census runs. It records evidence within an explicitly bounded generator domain and does not state an unbounded mathematical result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "summary_id",
+    "created_utc",
+    "producer",
+    "generator",
+    "scope",
+    "configuration",
+    "checks",
+    "runs",
+    "totals",
+    "claims",
+    "limitations",
+    "replay_archive"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "schemas/universal-census-summary-v1.schema.json"
+    },
+    "schema_version": {
+      "const": "total-coloring.universal-census-summary.v1"
+    },
+    "summary_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "created_utc": {
+      "type": "string",
+      "format": "utc-date-time"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "commit",
+        "distribution_version",
+        "source_sha256",
+        "python_implementation",
+        "python_version"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^(?!0{40}$)[0-9a-f]{40}$"
+        },
+        "distribution_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_sha256": {
+          "type": "string",
+          "format": "sha256"
+        },
+        "python_implementation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "python_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "executable", "sha256"],
+      "properties": {
+        "name": {
+          "const": "nauty-geng"
+        },
+        "executable": {
+          "type": "string",
+          "pattern": "^(?!\\.{1,2}$)[^/\\\\\\u0000-\\u001F]+$"
+        },
+        "sha256": {
+          "type": "string",
+          "format": "sha256"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "objective",
+        "graph_family",
+        "connected",
+        "min_degree",
+        "max_degree",
+        "require_high_degree",
+        "partition_enumerator",
+        "fix_distinguished_colors"
+      ],
+      "properties": {
+        "objective": {
+          "const": "universal_auxiliary_extension"
+        },
+        "graph_family": {
+          "const": "finite_simple_unlabeled_graphs"
+        },
+        "connected": {
+          "const": false
+        },
+        "min_degree": {
+          "type": "null"
+        },
+        "max_degree": {
+          "type": "null"
+        },
+        "require_high_degree": {
+          "const": true
+        },
+        "partition_enumerator": {
+          "const": "complement-matchings-lexicographic-v1"
+        },
+        "fix_distinguished_colors": {
+          "const": true
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkpoint_interval", "search_limits"],
+      "properties": {
+        "checkpoint_interval": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "search_limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_nodes_per_check", "timeout_seconds_per_check"],
+          "properties": {
+            "max_nodes_per_check": {
+              "type": ["integer", "null"],
+              "minimum": 1
+            },
+            "timeout_seconds_per_check": {
+              "type": ["number", "null"],
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check_id", "backend_id", "palette_offset", "description"],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "backend_id": {
+            "enum": ["dsatur-iterative-v1", "static-order-iterative-v1"]
+          },
+          "palette_offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "order",
+          "run_fingerprint",
+          "generator_arguments",
+          "shard_index",
+          "shard_count",
+          "record_count",
+          "partition_count",
+          "check_evaluations",
+          "counts",
+          "members"
+        ],
+        "properties": {
+          "order": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "run_fingerprint": {
+            "type": "string",
+            "format": "sha256"
+          },
+          "generator_arguments": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "shard_index": {
+            "type": "integer",
+            "const": 0
+          },
+          "shard_count": {
+            "type": "integer",
+            "const": 1
+          },
+          "record_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "partition_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "check_evaluations": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "counts": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "verified_all",
+              "candidate_unsat",
+              "unknown",
+              "error",
+              "skipped"
+            ],
+            "properties": {
+              "verified_all": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "candidate_unsat": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unknown": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "error": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "skipped": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "members": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["manifest", "completion", "records"],
+            "properties": {
+              "manifest": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "bytes", "sha256"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "format": "relative-path"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "format": "sha256"
+                  }
+                }
+              },
+              "completion": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "bytes", "sha256"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "format": "relative-path"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "format": "sha256"
+                  }
+                }
+              },
+              "records": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["path", "bytes", "sha256"],
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "format": "relative-path"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sha256": {
+                    "type": "string",
+                    "format": "sha256"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order_count",
+        "record_count",
+        "partition_count",
+        "check_evaluations",
+        "counts"
+      ],
+      "properties": {
+        "order_count": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "record_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "partition_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "check_evaluations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "verified_all",
+            "candidate_unsat",
+            "unknown",
+            "error",
+            "skipped"
+          ],
+          "properties": {
+            "verified_all": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "candidate_unsat": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skipped": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "claims": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_id",
+          "claim_type",
+          "status",
+          "finite_scope",
+          "orders",
+          "required_checks",
+          "limitations"
+        ],
+        "properties": {
+          "claim_id": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)*$"
+          },
+          "claim_type": {
+            "const": "finite_bound"
+          },
+          "status": {
+            "const": "verified_in_finite_scope"
+          },
+          "finite_scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "orders": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 256,
+            "items": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          },
+          "required_checks": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "const": [
+              "dsatur-delta-plus-2",
+              "dsatur-delta-plus-3",
+              "static-delta-plus-2"
+            ],
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+            }
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "const": [
+              "The finite census is computational evidence and does not establish an unbounded theorem.",
+              "Generator completeness is assumed for the hash-pinned nauty-geng executable."
+            ],
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "const": [
+        "The finite census is computational evidence and does not establish an unbounded theorem.",
+        "Generator completeness is assumed for the hash-pinned nauty-geng executable."
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "replay_archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["external_artifact", "url", "media_type", "bytes", "sha256"],
+      "properties": {
+        "external_artifact": {
+          "type": "string",
+          "format": "relative-path"
+        },
+        "url": {
+          "type": "string",
+          "format": "https-uri"
+        },
+        "media_type": {
+          "const": "application/gzip"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "format": "sha256"
+        }
+      }
+    }
+  }
+}
