@@ -12,6 +12,8 @@ All notable changes are documented here. The project follows
 
 ### Added
 
+- Explicit DSATUR/static auxiliary backend selection and a separate resumable
+  universal-census transcript with complete all-partition witness replay.
 - Canonical immutable simple graphs with strict JSON and graph6 codecs.
 - Independent total-coloring certificates and semantic verification.
 - Deterministic iterative DSATUR, an independent static-order audit backend,

@@ -18,6 +18,9 @@ EXPECTED_NAMES = (
     "census-record-v1.schema.json",
     "graph-v1.schema.json",
     "total-coloring-certificate-v1.schema.json",
+    "universal-census-completion-v1.schema.json",
+    "universal-census-manifest-v1.schema.json",
+    "universal-census-record-v1.schema.json",
 )
 
 

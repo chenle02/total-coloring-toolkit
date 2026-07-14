@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/universal-census-manifest-v1.schema.json",
+  "title": "Completed universal auxiliary-coloring census manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "run_fingerprint", "complete", "record_count",
+    "partition_count", "counts", "provenance", "artifacts"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.universal-census-manifest.v1"},
+    "run_fingerprint": {"$ref": "#/$defs/digest"},
+    "complete": {"const": true},
+    "record_count": {"type": "integer", "minimum": 0},
+    "partition_count": {"type": "integer", "minimum": 0},
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified_all", "candidate_unsat", "unknown", "error", "skipped"],
+      "properties": {
+        "verified_all": {"type": "integer", "minimum": 0},
+        "candidate_unsat": {"type": "integer", "minimum": 0},
+        "unknown": {"type": "integer", "minimum": 0},
+        "error": {"type": "integer", "minimum": 0},
+        "skipped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "provenance": {"$ref": "#/$defs/provenance"},
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records_path", "records_sha256", "records_bytes"],
+      "properties": {
+        "records_path": {"const": "records.jsonl"},
+        "records_sha256": {"$ref": "#/$defs/digest"},
+        "records_bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "nullableNonnegativeInteger": {"type": ["integer", "null"], "minimum": 0},
+    "nullablePositiveInteger": {"type": ["integer", "null"], "minimum": 1},
+    "checkSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend_id", "palette_offset"],
+      "properties": {
+        "backend_id": {"enum": ["dsatur-iterative-v1", "static-order-iterative-v1"]},
+        "palette_offset": {"type": "integer", "minimum": 0}
+      }
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generator_spec", "checks", "filters", "fix_distinguished_colors",
+        "partition_enumerator", "search_limits", "checkpoint_interval"
+      ],
+      "properties": {
+        "generator_spec": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["order", "connected", "min_degree", "max_degree", "shard_index", "shard_count"],
+          "properties": {
+            "order": {"type": "integer", "minimum": 0},
+            "connected": {"type": "boolean"},
+            "min_degree": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "max_degree": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "shard_index": {"$ref": "#/$defs/nullableNonnegativeInteger"},
+            "shard_count": {"$ref": "#/$defs/nullablePositiveInteger"}
+          }
+        },
+        "checks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/checkSpec"}},
+        "filters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["require_high_degree"],
+          "properties": {"require_high_degree": {"type": "boolean"}}
+        },
+        "fix_distinguished_colors": {"const": true},
+        "partition_enumerator": {"const": "complement-matchings-lexicographic-v1"},
+        "search_limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["max_nodes_per_check", "timeout_seconds_per_check"],
+          "properties": {
+            "max_nodes_per_check": {"$ref": "#/$defs/nullablePositiveInteger"},
+            "timeout_seconds_per_check": {"type": ["number", "null"], "exclusiveMinimum": 0}
+          }
+        },
+        "checkpoint_interval": {"type": "integer", "minimum": 1}
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["objective", "config", "generator", "shard", "toolkit"],
+      "properties": {
+        "objective": {"const": "universal_auxiliary_extension"},
+        "config": {"$ref": "#/$defs/config"},
+        "generator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "executable", "sha256", "arguments"],
+          "properties": {
+            "name": {"const": "nauty-geng"},
+            "executable": {"type": "string", "pattern": "^(?!\\.{1,2}$)[^/\\\\\\u0000-\\u001F]+$"},
+            "sha256": {"$ref": "#/$defs/digest"},
+            "arguments": {"type": "array", "items": {"type": "string"}}
+          }
+        },
+        "shard": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["index", "count"],
+          "properties": {"index": {"type": "integer", "minimum": 0}, "count": {"type": "integer", "minimum": 1}}
+        },
+        "toolkit": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["distribution_version", "source_sha256", "python_implementation", "python_version"],
+          "properties": {
+            "distribution_version": {"type": "string", "minLength": 1},
+            "source_sha256": {"$ref": "#/$defs/digest"},
+            "python_implementation": {"type": "string", "minLength": 1},
+            "python_version": {"type": "string", "minLength": 1}
+          }
+        }
+      }
+    }
+  }
+}

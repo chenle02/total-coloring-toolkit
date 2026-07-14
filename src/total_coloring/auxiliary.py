@@ -12,11 +12,12 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from total_coloring.backends import DEFAULT_SOLVER_BACKEND, SolverBackend, solve_with_backend
 from total_coloring.certificates import TotalColoringCertificate, verify_total_coloring
 from total_coloring.edge import edge_coloring_problem, verify_edge_coloring
 from total_coloring.graph import Edge, SimpleGraph
 from total_coloring.model import ColoringProblem
-from total_coloring.solver import SearchLimits, SolveResult, SolveStatus, solve_dsatur
+from total_coloring.solver import SearchLimits, SolveResult, SolveStatus
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,6 +335,7 @@ def solve_auxiliary_partition(
     *,
     limits: SearchLimits | None = None,
     fix_distinguished_colors: bool = True,
+    backend: SolverBackend = DEFAULT_SOLVER_BACKEND,
 ) -> AuxiliaryPartitionResult:
     """Solve and independently verify one fixed-partition extension problem."""
 
@@ -343,7 +345,7 @@ def solve_auxiliary_partition(
         color_count,
         fix_distinguished_colors=fix_distinguished_colors,
     )
-    solved = solve_dsatur(problem, limits=limits)
+    solved = solve_with_backend(problem, backend=backend, limits=limits)
     if solved.status is not SolveStatus.WITNESS:
         return AuxiliaryPartitionResult(construction, solved, None)
     if solved.assignment is None:
@@ -376,6 +378,7 @@ def check_all_auxiliary_partitions(
     limits_per_partition: SearchLimits | None = None,
     max_partitions: int | None = None,
     fix_distinguished_colors: bool = True,
+    backend: SolverBackend = DEFAULT_SOLVER_BACKEND,
 ) -> UniversalAuxiliaryResult:
     """Test the stronger universal extension statement for one graph.
 
@@ -397,6 +400,8 @@ def check_all_auxiliary_partitions(
         raise ValueError("max_partitions must be a positive integer or None")
     if not isinstance(fix_distinguished_colors, bool):
         raise ValueError("fix_distinguished_colors must be a boolean")
+    if not isinstance(backend, SolverBackend):
+        raise ValueError("backend must be a SolverBackend")
 
     started = 0
     verified = 0
@@ -414,6 +419,7 @@ def check_all_auxiliary_partitions(
             color_count,
             limits=limits_per_partition,
             fix_distinguished_colors=fix_distinguished_colors,
+            backend=backend,
         )
         if result.status is SolveStatus.WITNESS:
             verified += 1
@@ -489,6 +495,7 @@ def search_auxiliary_extensions(
     *,
     limits_per_partition: SearchLimits | None = None,
     max_partitions: int | None = None,
+    backend: SolverBackend = DEFAULT_SOLVER_BACKEND,
 ) -> AuxiliarySearchResult:
     """Search all partitions until a verified extension is found.
 
@@ -508,6 +515,8 @@ def search_auxiliary_extensions(
         or max_partitions <= 0
     ):
         raise ValueError("max_partitions must be a positive integer or None")
+    if not isinstance(backend, SolverBackend):
+        raise ValueError("backend must be a SolverBackend")
 
     started = 0
     completed = 0
@@ -524,6 +533,7 @@ def search_auxiliary_extensions(
             partition,
             color_count,
             limits=limits_per_partition,
+            backend=backend,
         )
         construction = partition_result.construction
         solved = partition_result.solve_result

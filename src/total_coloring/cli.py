@@ -18,9 +18,10 @@ from total_coloring.auxiliary import (
     check_all_auxiliary_partitions,
     search_auxiliary_extensions,
 )
-from total_coloring.census import CensusConfig, CensusCounts, run_census
+from total_coloring.backends import DEFAULT_SOLVER_BACKEND, SolverBackend
+from total_coloring.census import CensusConfig, CensusCounts, CensusError, run_census
 from total_coloring.certificates import TotalColoringCertificate, verify_total_coloring
-from total_coloring.geng import GengSpec
+from total_coloring.geng import GengError, GengSpec
 from total_coloring.graph import SimpleGraph
 from total_coloring.proof_audit import (
     CountingParameters,
@@ -29,6 +30,13 @@ from total_coloring.proof_audit import (
 )
 from total_coloring.solver import SearchLimits, SolveStatus, solve_dsatur
 from total_coloring.total import split_total_assignment, total_coloring_problem
+from total_coloring.universal_census import (
+    DEFAULT_UNIVERSAL_CHECKS,
+    UniversalCensusConfig,
+    UniversalCensusCounts,
+    UniversalCheckSpec,
+    run_universal_census,
+)
 
 EXIT_SUCCESS = 0
 EXIT_NO_WITNESS = 1
@@ -64,6 +72,24 @@ def _positive_integer(value: str) -> int:
     if parsed <= 0:
         raise argparse.ArgumentTypeError("must be a positive integer")
     return parsed
+
+
+def _universal_check(value: str) -> UniversalCheckSpec:
+    """Parse ``BACKEND:OFFSET`` with concise or stable backend identifiers."""
+
+    try:
+        backend_text, offset_text = value.rsplit(":", 1)
+        aliases = {
+            "dsatur": SolverBackend.DSATUR,
+            "static": SolverBackend.STATIC,
+        }
+        backend = aliases[backend_text] if backend_text in aliases else SolverBackend(backend_text)
+        offset = int(offset_text)
+        return UniversalCheckSpec(backend, offset)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(
+            "must be BACKEND:OFFSET, for example dsatur:1 or static:1"
+        ) from exc
 
 
 def _read_bytes(path: str, *, max_bytes: int) -> bytes:
@@ -233,8 +259,10 @@ def _command_aux_search(arguments: argparse.Namespace) -> int:
         arguments.colors,
         limits_per_partition=_limits(arguments),
         max_partitions=arguments.max_partitions,
+        backend=arguments.backend,
     )
     payload: dict[str, Any] = {
+        "backend_id": arguments.backend.value,
         "candidate_failures": result.candidate_failures,
         "color_count": result.color_count,
         "detail": result.detail,
@@ -270,8 +298,10 @@ def _command_aux_check_all(arguments: argparse.Namespace) -> int:
         limits_per_partition=_limits(arguments),
         max_partitions=arguments.max_partitions,
         fix_distinguished_colors=not arguments.unfixed_distinguished_colors,
+        backend=arguments.backend,
     )
     payload: dict[str, Any] = {
+        "backend_id": arguments.backend.value,
         "color_count": result.color_count,
         "detail": result.detail,
         "graph_fingerprint": result.graph_fingerprint,
@@ -368,6 +398,49 @@ def _census_exit(counts: CensusCounts) -> int:
     return EXIT_SUCCESS
 
 
+def _command_universal_census(arguments: argparse.Namespace) -> int:
+    checks = DEFAULT_UNIVERSAL_CHECKS if arguments.check is None else tuple(arguments.check)
+    config = UniversalCensusConfig(
+        geng=GengSpec(
+            order=arguments.order,
+            connected=arguments.connected,
+            min_degree=arguments.min_degree,
+            max_degree=arguments.max_degree,
+            shard_index=arguments.shard_index,
+            shard_count=arguments.shard_count,
+        ),
+        checks=checks,
+        require_high_degree=not arguments.relaxed_partition_domain,
+        limits_per_check=_limits(arguments),
+        checkpoint_interval=arguments.checkpoint_interval,
+    )
+    result = run_universal_census(config, arguments.output, executable=arguments.geng)
+    _emit(
+        {
+            "completion_path": str(result.completion_path),
+            "counts": result.counts.to_dict(),
+            "manifest_path": str(result.manifest_path),
+            "partition_count": result.partition_count,
+            "record_count": result.record_count,
+            "records_path": str(result.records_path),
+            "resumed_records": result.resumed_records,
+            "run_fingerprint": result.run_fingerprint,
+            "status": "complete",
+        }
+    )
+    return _universal_census_exit(result.counts)
+
+
+def _universal_census_exit(counts: UniversalCensusCounts) -> int:
+    if counts.error:
+        return EXIT_ERROR
+    if counts.unknown:
+        return EXIT_UNKNOWN
+    if counts.candidate_unsat:
+        return EXIT_NO_WITNESS
+    return EXIT_SUCCESS
+
+
 def _add_graph_input(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--graph", required=True, help="graph JSON/graph6 path, or - for stdin")
     parser.add_argument(
@@ -419,6 +492,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_graph_input(auxiliary)
     auxiliary.add_argument("--colors", type=int, required=True)
     auxiliary.add_argument("--max-partitions", type=int)
+    auxiliary.add_argument(
+        "--backend",
+        type=SolverBackend,
+        choices=tuple(SolverBackend),
+        default=DEFAULT_SOLVER_BACKEND,
+        help="deterministic solver backend (default: dsatur-iterative-v1)",
+    )
     _add_limits(auxiliary)
     _add_certificate_output(auxiliary)
     auxiliary.set_defaults(handler=_command_aux_search)
@@ -429,6 +509,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_graph_input(universal)
     universal.add_argument("--colors", type=int, required=True)
     universal.add_argument("--max-partitions", type=int)
+    universal.add_argument(
+        "--backend",
+        type=SolverBackend,
+        choices=tuple(SolverBackend),
+        default=DEFAULT_SOLVER_BACKEND,
+        help="deterministic solver backend (default: dsatur-iterative-v1)",
+    )
     universal.add_argument(
         "--unfixed-distinguished-colors",
         action="store_true",
@@ -471,6 +558,39 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_limits(census)
     census.set_defaults(handler=_command_census)
+
+    all_partitions = commands.add_parser(
+        "universal-census",
+        help="run or resume a replayable all-partition geng census",
+    )
+    all_partitions.add_argument("--order", type=int, required=True)
+    all_partitions.add_argument(
+        "--output", required=True, help="dedicated universal-census output directory"
+    )
+    all_partitions.add_argument(
+        "--geng",
+        default="geng",
+        help="geng executable name or path (default auto-detects geng or nauty-geng)",
+    )
+    all_partitions.add_argument("--connected", action="store_true")
+    all_partitions.add_argument("--min-degree", type=int)
+    all_partitions.add_argument("--max-degree", type=int)
+    all_partitions.add_argument("--shard-index", type=int)
+    all_partitions.add_argument("--shard-count", type=int)
+    all_partitions.add_argument(
+        "--check",
+        action="append",
+        type=_universal_check,
+        help=("repeat BACKEND:OFFSET checks (default: dsatur:1, dsatur:2, static:1)"),
+    )
+    all_partitions.add_argument("--checkpoint-interval", type=int, default=1)
+    all_partitions.add_argument(
+        "--relaxed-partition-domain",
+        action="store_true",
+        help="use n <= 2(Delta+1), one degree broader than the paper regime",
+    )
+    _add_limits(all_partitions)
+    all_partitions.set_defaults(handler=_command_universal_census)
     return parser
 
 
@@ -482,7 +602,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         handler = arguments.handler
         return int(handler(arguments))
-    except (CliError, OSError, ValueError) as exc:
+    except (CensusError, CliError, GengError, OSError, ValueError) as exc:
         _emit({"error": str(exc), "status": "error"}, stream=sys.stderr)
         return EXIT_ERROR
 

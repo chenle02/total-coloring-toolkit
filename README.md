@@ -20,7 +20,8 @@ counterexample when another partition remains untested.
 - high-degree equitable partitions via complement matchings;
 - auxiliary-graph construction, rainbow extension, and decoding;
 - streamed `nauty-geng` enumeration with reproducible sharding;
-- resumable census output with versioned schemas and SHA-256 provenance;
+- resumable existential and replayable universal census output with versioned
+  schemas and SHA-256 provenance;
 - wheel-installed access to every versioned JSON schema through a typed,
   traversal-safe resource API;
 - explicit finite audits of algebraic proof obligations.
@@ -109,6 +110,9 @@ Test the stronger statement that **every** equitable partition extends:
 
 ```bash
 total-coloring aux-check-all --graph graph.g6 --colors 7
+# Independently repeat the same check with the static-order backend:
+total-coloring aux-check-all --graph graph.g6 --colors 7 \
+  --backend static-order-iterative-v1
 ```
 
 Run or resume an atomic, provenance-pinned `geng` census. The default palette
@@ -119,6 +123,31 @@ is `D+2 = Delta(G)+3`, and the default filter is the paper's high-degree regime
 total-coloring census --order 8 --output runs/order-8 \
   --shard-index 0 --shard-count 16
 ```
+
+For a replayable universal transcript, use the separate command. It stores one
+canonical JSONL record per generated graph, nests every equitable partition,
+and retains the complete auxiliary edge-color assignment for each successful
+check. The defaults compare DSATUR at `D+1` and `D+2` with the independent
+static-order backend at `D+1`:
+
+```bash
+total-coloring universal-census --order 8 --output runs/order-8-universal \
+  --shard-index 0 --shard-count 16
+
+# Override the check matrix by repeating --check BACKEND:OFFSET.
+total-coloring universal-census --order 6 --output runs/custom \
+  --check dsatur:1 --check static:1
+```
+
+An artifact-level `verified_all` status is accepted only after the parser
+reconstructs every partition and auxiliary problem and semantically replays
+every stored witness. A cross-backend `D+1` status disagreement is an error,
+not a result to average or majority-vote.
+
+Running the same `universal-census` command again on a completed directory is
+also its verification operation: it checks hashes and canonical schemas,
+replays every stored witness, regenerates the configured `geng` stream, and
+compares graph6, fingerprint, index, and end-of-stream coverage exactly.
 
 Audit the draft's smallest `c=2`, `P=Q=1` arithmetic case:
 
@@ -139,7 +168,7 @@ current conjectural extension statements, and corrected proof obligations.
 
 ## Schema resources
 
-The five public JSON schemas are part of both the source distribution and the
+The eight public JSON schemas are part of both the source distribution and the
 wheel. Applications should use the typed API instead of assuming a repository
 layout:
 
