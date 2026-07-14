@@ -77,13 +77,14 @@ certificate = TotalColoringCertificate.create(graph, 3, vertex_colors, edge_colo
 assert verify_total_coloring(graph, certificate).valid
 ```
 
-Large graph censuses additionally require nauty's `geng`. Depending on the
-Linux distribution the executable may be named `geng` or `nauty-geng`:
+Large graph censuses additionally require nauty's `geng`. The toolkit
+automatically discovers both the upstream `geng` name and Debian-family
+distributions' `nauty-geng` name:
 
 ```bash
 GENG=$(command -v geng || command -v nauty-geng)
 "$GENG" -help 2>&1 | head -n 2
-# If only the prefixed binary exists, pass: --geng nauty-geng
+# Use --geng /custom/path/geng only to select a nonstandard installation.
 ```
 
 ## Command-line examples

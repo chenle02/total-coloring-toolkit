@@ -47,6 +47,16 @@ TEST_TOOLKIT = ToolkitIdentity(
 )
 
 
+@pytest.fixture(autouse=True)
+def isolate_census_tests_from_installed_geng(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep synthetic census tests independent of workstation executables."""
+
+    def fake_resolve(executable: str = "geng") -> Path:
+        return Path("/synthetic") / Path(executable).name
+
+    monkeypatch.setattr(census, "resolve_geng", fake_resolve)
+
+
 def patch_generator(
     monkeypatch: pytest.MonkeyPatch,
     graphs: tuple[SimpleGraph, ...],

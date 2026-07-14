@@ -17,6 +17,9 @@ class GengError(RuntimeError):
     """Raised when graph generation fails or emits malformed data."""
 
 
+_DEFAULT_EXECUTABLE_CANDIDATES = ("geng", "nauty-geng")
+
+
 @dataclass(frozen=True, slots=True)
 class GengSpec:
     order: int
@@ -83,10 +86,21 @@ class GengIdentity:
 
 
 def resolve_geng(executable: str = "geng") -> Path:
-    resolved = shutil.which(executable)
-    if resolved is None:
-        raise GengError(f"geng executable not found: {executable}")
-    return Path(resolved).resolve()
+    """Resolve a nauty ``geng`` executable without invoking a shell.
+
+    Debian-family distributions install the binary as ``nauty-geng`` while
+    upstream and several other distributions use ``geng``.  The default
+    request accepts either portable package name; an explicit non-default
+    executable remains exact and never falls back to another command.
+    """
+
+    candidates = _DEFAULT_EXECUTABLE_CANDIDATES if executable == "geng" else (executable,)
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved is not None:
+            return Path(resolved).resolve()
+    attempted = ", ".join(candidates)
+    raise GengError(f"geng executable not found; tried: {attempted}")
 
 
 def geng_identity(spec: GengSpec, *, executable: str = "geng") -> GengIdentity:

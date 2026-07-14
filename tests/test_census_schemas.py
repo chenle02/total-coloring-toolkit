@@ -62,6 +62,11 @@ def test_published_artifacts_validate_against_schemas(
     monkeypatch.setattr(census, "geng_identity", fake_identity)
     monkeypatch.setattr(census, "stream_geng", fake_stream)
     monkeypatch.setattr(census, "search_auxiliary_extensions", fake_search)
+    monkeypatch.setattr(
+        census,
+        "resolve_geng",
+        lambda executable="geng": Path("/synthetic") / Path(executable).name,
+    )
     toolkit = ToolkitIdentity("test", "b" * 64, "CPython", "3.13.0")
     result = run_census(CensusConfig(GengSpec(4)), tmp_path, toolkit_identity=toolkit)
 

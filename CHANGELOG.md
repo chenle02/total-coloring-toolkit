@@ -5,6 +5,11 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Discover Debian's `nauty-geng` executable automatically and keep synthetic
+  census tests hermetic when nauty is not installed on a development machine.
+
 ### Added
 
 - Canonical immutable simple graphs with strict JSON and graph6 codecs.
