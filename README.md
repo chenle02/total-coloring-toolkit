@@ -43,8 +43,8 @@ uv run python scripts/package_gate.py
 
 ## Install and 60-second quickstart
 
-The supported platform is Linux/POSIX with Python 3.11--3.14. Once the public
-GitHub repository launches, install directly from that repository (there is no
+The supported platform is Linux/POSIX with Python 3.11--3.14. Install from the
+public GitHub repository or a hash-verified GitHub release wheel (there is no
 PyPI release claim):
 
 ```bash
@@ -121,8 +121,13 @@ is `D+2 = Delta(G)+3`, and the default filter is the paper's high-degree regime
 
 ```bash
 total-coloring census --order 8 --output runs/order-8 \
-  --shard-index 0 --shard-count 16
+  --shard-index 0 --shard-count 16 --split-depth 2
 ```
+
+`--split-depth 2` passes the canonical `-X2` work-division option to `geng`.
+It requires a shard index and count, and every shard in one set must use the
+same value. The exact token is bound into the generator argument vector and
+run fingerprint; it changes how `geng` divides work, not the union of graphs.
 
 For a replayable universal transcript, use the separate command. It stores one
 canonical JSONL record per generated graph, nests every equitable partition,
@@ -132,7 +137,7 @@ static-order backend at `D+1`:
 
 ```bash
 total-coloring universal-census --order 8 --output runs/order-8-universal \
-  --shard-index 0 --shard-count 16
+  --shard-index 0 --shard-count 16 --split-depth 2
 
 # Override the check matrix by repeating --check BACKEND:OFFSET.
 total-coloring universal-census --order 6 --output runs/custom \
@@ -148,6 +153,23 @@ Running the same `universal-census` command again on a completed directory is
 also its verification operation: it checks hashes and canonical schemas,
 replays every stored witness, regenerates the configured `geng` stream, and
 compares graph6, fingerprint, index, and end-of-stream coverage exactly.
+
+After all shards complete, validate the array as one scientific object. The
+validator replays each run, rejects mixed configurations or executable/toolkit
+identities, detects overlap, and compares the shard union with the matching
+unsharded `geng` stream through exact EOF. It is read-only and retains graph6
+identifiers only up to an explicit memory cap:
+
+```bash
+total-coloring universal-validate-shards \
+  --run runs/order-8/shard-00 --run runs/order-8/shard-01 \
+  --geng /absolute/path/to/geng --max-union-graphs 1000000
+```
+
+This validation does not weaken the public release-v1 rule below: sharded
+transcripts remain an audit result until a separately reviewed sharded release
+profile is implemented. The guarded Slurm workflow used for larger arrays is
+documented in [`docs/easley.md`](docs/easley.md).
 
 After every per-order run is complete, prepare the reviewed public-data
 candidate and its separate deterministic replay archive. This command is

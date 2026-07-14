@@ -5,6 +5,23 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-14
+
+### Added
+
+- Provenance-bound `geng -X#` split-depth support for balanced census arrays,
+  while retaining byte-compatible version-1 configuration manifests when the
+  option is absent.
+- Read-only validation of complete universal-census shard sets, including
+  per-shard replay, uniform-contract checks, and exact comparison of the
+  disjoint shard union with the unrestricted generator stream.
+- Reusable Easley/Slurm launch tooling with isolated no-site execution from
+  sealed launcher/wheel memory snapshots, canonical campaign contracts,
+  a separate bootstrap-only runtime phase, prior runtime and `geng` hash pins,
+  immutable receipt chains, atomic campaign reservation, checkpoint-aware
+  arrays, independent validation, fail-closed reduction, and a replayed
+  order-eight prerequisite gate for order-nine production.
+
 ## [0.1.0] - 2026-07-14
 
 ### Fixed
@@ -43,5 +60,6 @@ All notable changes are documented here. The project follows
 - Transactional, dry-run-by-default promotion into a separate public data repo.
 - Typed CLI, strict quality gates, differential tests, and security workflows.
 
-[Unreleased]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/chenle02/total-coloring-toolkit/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/chenle02/total-coloring-toolkit/releases/tag/v0.1.0

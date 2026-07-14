@@ -359,6 +359,8 @@ def test_census_cli_maps_terminal_counts_to_exit_codes(
         assert output == str(tmp_path / "run")
         assert executable == "custom-geng"
         assert config.require_high_degree is True
+        assert config.geng.split_depth == 2
+        assert config.geng.arguments() == ("-q", "-X2", "4", "1/3")
         return CensusRunResult(
             run_fingerprint="0" * 64,
             record_count=counts.total,
@@ -379,6 +381,12 @@ def test_census_cli_maps_terminal_counts_to_exit_codes(
             str(tmp_path / "run"),
             "--geng",
             "custom-geng",
+            "--shard-index",
+            "1",
+            "--shard-count",
+            "3",
+            "--split-depth",
+            "2",
         ]
     )
 
@@ -443,6 +451,12 @@ def test_universal_census_cli_uses_default_and_custom_check_matrices(
             "static:1",
             "--check",
             "dsatur:1",
+            "--shard-index",
+            "1",
+            "--shard-count",
+            "3",
+            "--split-depth",
+            "2",
         ]
     )
     assert custom_code == EXIT_SUCCESS
@@ -451,6 +465,8 @@ def test_universal_census_cli_uses_default_and_custom_check_matrices(
         SolverBackend.DSATUR,
         SolverBackend.STATIC,
     )
+    assert seen[-1].geng.split_depth == 2
+    assert seen[-1].geng.arguments() == ("-q", "-X2", "4", "1/3")
 
 
 def test_universal_export_cli_maps_release_metadata(
@@ -536,5 +552,27 @@ def test_universal_census_cli_reports_generator_failure_as_canonical_json(
     assert captured.out == ""
     assert json.loads(captured.err) == {
         "error": "synthetic missing geng",
+        "status": "error",
+    }
+
+
+def test_split_depth_cli_requires_a_sharded_run(tmp_path: Path, capsys: object) -> None:
+    exit_code = main(
+        [
+            "universal-census",
+            "--order",
+            "4",
+            "--output",
+            str(tmp_path / "run"),
+            "--split-depth",
+            "2",
+        ]
+    )
+
+    assert exit_code == EXIT_ERROR
+    captured = capsys.readouterr()  # type: ignore[attr-defined]
+    assert captured.out == ""
+    assert json.loads(captured.err) == {
+        "error": "split_depth requires a sharded geng specification",
         "status": "error",
     }

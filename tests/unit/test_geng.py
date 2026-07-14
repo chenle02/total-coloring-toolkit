@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 from pathlib import Path
 
@@ -28,6 +29,17 @@ def test_geng_arguments_are_deterministic_and_shell_free() -> None:
     assert spec.arguments() == ("-q", "-c", "-d1", "-D5", "8", "2/7")
 
 
+def test_split_depth_is_a_canonical_provenance_bound_geng_argument() -> None:
+    spec = GengSpec(order=9, shard_index=7, shard_count=16, split_depth=2)
+
+    assert spec.arguments() == ("-q", "-X2", "9", "7/16")
+    assert GengSpec(order=9, shard_index=7, shard_count=16).arguments() == (
+        "-q",
+        "9",
+        "7/16",
+    )
+
+
 @pytest.mark.parametrize(
     "kwargs",
     [
@@ -38,6 +50,9 @@ def test_geng_arguments_are_deterministic_and_shell_free() -> None:
         {"order": 4, "shard_index": 0},
         {"order": 4, "shard_index": 1, "shard_count": 1},
         {"order": 4, "shard_index": 0, "shard_count": 0},
+        {"order": 4, "split_depth": 2},
+        {"order": 4, "shard_index": 0, "shard_count": 2, "split_depth": -1},
+        {"order": 4, "shard_index": 0, "shard_count": 2, "split_depth": True},
     ],
 )
 def test_geng_spec_rejects_invalid_configuration(kwargs: dict[str, object]) -> None:
@@ -113,3 +128,23 @@ def test_stream_and_identity_with_hermetic_executable(tmp_path: Path) -> None:
     assert identity.executable == executable.name
     assert identity.sha256 == hashlib.sha256(executable.read_bytes()).hexdigest()
     assert identity.arguments == spec.arguments()
+
+
+def test_proc_fd_executable_remains_live_and_has_portable_identity(tmp_path: Path) -> None:
+    executable = tmp_path / "sealed-geng"
+    executable.write_text("#!/bin/sh\nprintf '%s\\n' 'C~'\n", encoding="ascii")
+    executable.chmod(0o700)
+    descriptor = os.open(executable, os.O_RDONLY | os.O_CLOEXEC)
+    try:
+        proc_path = Path(f"/proc/{os.getpid()}/fd/{descriptor}")
+
+        assert resolve_geng(str(proc_path)) == proc_path
+        identity = geng_identity(GengSpec(order=4), executable=str(proc_path))
+        graphs = list(stream_geng(GengSpec(order=4), executable=str(proc_path)))
+
+        assert identity.executable == "geng"
+        assert identity.sha256 == hashlib.sha256(executable.read_bytes()).hexdigest()
+        assert len(graphs) == 1
+        assert graphs[0].order == 4
+    finally:
+        os.close(descriptor)

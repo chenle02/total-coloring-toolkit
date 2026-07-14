@@ -20,14 +20,33 @@ class GengError(RuntimeError):
 _DEFAULT_EXECUTABLE_CANDIDATES = ("geng", "nauty-geng")
 
 
+def _is_linux_proc_fd_path(path: Path) -> bool:
+    parts = path.parts
+    return (
+        len(parts) == 5
+        and parts[0] == "/"
+        and parts[1] == "proc"
+        and (parts[2] == "self" or parts[2].isdigit())
+        and parts[3] == "fd"
+        and parts[4].isdigit()
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class GengSpec:
+    """Canonical graph-family and optional modular work-division arguments.
+
+    ``split_depth`` is execution provenance carried by :meth:`arguments`. It is
+    deliberately not a new field in the version-1 census configuration schema.
+    """
+
     order: int
     connected: bool = False
     min_degree: int | None = None
     max_degree: int | None = None
     shard_index: int | None = None
     shard_count: int | None = None
+    split_depth: int | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.order, bool) or not isinstance(self.order, int) or self.order < 0:
@@ -56,9 +75,18 @@ class GengSpec:
                 or not 0 <= self.shard_index < self.shard_count
             ):
                 raise ValueError("shard_index must lie in [0, shard_count)")
+        if self.split_depth is not None:
+            if isinstance(self.split_depth, bool) or not isinstance(self.split_depth, int):
+                raise ValueError("split_depth must be a nonnegative integer")
+            if self.split_depth < 0:
+                raise ValueError("split_depth must be a nonnegative integer")
+            if self.shard_count is None:
+                raise ValueError("split_depth requires a sharded geng specification")
 
     def arguments(self) -> tuple[str, ...]:
         arguments = ["-q"]
+        if self.split_depth is not None:
+            arguments.append(f"-X{self.split_depth}")
         if self.connected:
             arguments.append("-c")
         if self.min_degree is not None:
@@ -98,7 +126,11 @@ def resolve_geng(executable: str = "geng") -> Path:
     for candidate in candidates:
         resolved = shutil.which(candidate)
         if resolved is not None:
-            return Path(resolved).resolve()
+            path = Path(resolved)
+            # Resolving a sealed memfd produces a display-only target such as
+            # ``/memfd:geng (deleted)``, which cannot be reopened. Retain the
+            # live descriptor path used by the Easley sealed loader.
+            return path if _is_linux_proc_fd_path(path) else path.resolve()
     attempted = ", ".join(candidates)
     raise GengError(f"geng executable not found; tried: {attempted}")
 
@@ -106,7 +138,8 @@ def resolve_geng(executable: str = "geng") -> Path:
 def geng_identity(spec: GengSpec, *, executable: str = "geng") -> GengIdentity:
     path = resolve_geng(executable)
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    return GengIdentity(path.name, digest, spec.arguments())
+    portable_name = "geng" if _is_linux_proc_fd_path(path) else path.name
+    return GengIdentity(portable_name, digest, spec.arguments())
 
 
 def stream_geng(spec: GengSpec, *, executable: str = "geng") -> Iterator[SimpleGraph]:
