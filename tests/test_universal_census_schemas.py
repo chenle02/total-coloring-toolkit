@@ -48,7 +48,9 @@ def test_universal_artifacts_validate_against_schemas(
     )
     toolkit = ToolkitIdentity("test", "b" * 64, "CPython", "3.13.0")
     result = run_universal_census(
-        UniversalCensusConfig(GengSpec(4)), tmp_path, toolkit_identity=toolkit
+        UniversalCensusConfig(GengSpec(4, shard_index=1, shard_count=3, split_depth=2)),
+        tmp_path,
+        toolkit_identity=toolkit,
     )
 
     record_validator = Draft202012Validator(

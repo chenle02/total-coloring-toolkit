@@ -18,6 +18,36 @@ atomically. Completion manifests are emitted only after the input stream is
 fully consumed. Raw shard output remains private. Public promotion is a
 separate dry-run-by-default operation that verifies every hash.
 
+Sharded runs may set an explicit nonnegative `split_depth`, rendered as the
+canonical `geng -X#` argument before the graph order. The option is valid only
+with both a shard index and shard count, and it must be identical across a
+complete shard set. For v1 compatibility it is not a new configuration-schema
+field: the exact generator argument vector already binds it into the run
+fingerprint. Omitting the option preserves the original v1 arguments and run
+configuration representation byte for byte.
+
+A complete array is accepted only after `universal-validate-shards` has replayed
+every shard, checked the common non-index configuration and immutable software
+identities, rejected graph overlap, and matched the shard union against the
+corresponding unsharded generator stream through EOF. The union comparison is
+exact, read-only, and memory-bounded by the caller's maximum graph count. This
+array-level validation is computational evidence; it does not authorize the
+version-1 public exporter, which continues to require one unsharded run.
+
+The Easley campaign wrapper adds an execution-layer seal around this validator.
+It starts the cluster-managed Python standard library with `-I -B -S`, verifies
+the campaign contract, launcher ZIP, release wheel, runtime receipt, and `geng`
+before importing project code, and executes the launcher and wheel from sealed
+memory-file snapshots. The cluster Python binary, its standard library, and
+operating-system dynamic libraries remain an explicit external trust boundary.
+Runtime construction and scientific submission are separate campaigns: the
+first can only create a frozen runtime, while the second must bind the already
+recorded runtime-receipt and compiled-`geng` hashes before any census job is
+eligible for submission.
+An order-nine campaign additionally depends on a compute-node gate that replays
+the retained order-eight shard set and binds its artifact inventory root into
+the order-nine completion receipt.
+
 The universal census uses one JSONL line as the graph-level checkpoint. Each
 line contains every canonical equitable partition and each configured
 backend/palette check. Witness checks retain the full auxiliary edge-color

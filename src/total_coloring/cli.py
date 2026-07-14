@@ -42,6 +42,10 @@ from total_coloring.universal_release import (
     UniversalReleaseError,
     export_universal_release,
 )
+from total_coloring.universal_shards import (
+    DEFAULT_MAX_UNION_GRAPHS,
+    validate_completed_universal_shard_set,
+)
 
 EXIT_SUCCESS = 0
 EXIT_NO_WITNESS = 1
@@ -371,6 +375,7 @@ def _command_census(arguments: argparse.Namespace) -> int:
             max_degree=arguments.max_degree,
             shard_index=arguments.shard_index,
             shard_count=arguments.shard_count,
+            split_depth=arguments.split_depth,
         ),
         color_offset_from_degree_parameter=arguments.color_offset,
         require_high_degree=not arguments.relaxed_partition_domain,
@@ -413,6 +418,7 @@ def _command_universal_census(arguments: argparse.Namespace) -> int:
             max_degree=arguments.max_degree,
             shard_index=arguments.shard_index,
             shard_count=arguments.shard_count,
+            split_depth=arguments.split_depth,
         ),
         checks=checks,
         require_high_degree=not arguments.relaxed_partition_domain,
@@ -434,6 +440,16 @@ def _command_universal_census(arguments: argparse.Namespace) -> int:
         }
     )
     return _universal_census_exit(result.counts)
+
+
+def _command_universal_validate_shards(arguments: argparse.Namespace) -> int:
+    validation = validate_completed_universal_shard_set(
+        arguments.run,
+        executable=arguments.geng,
+        max_union_graphs=arguments.max_union_graphs,
+    )
+    _emit({**validation.to_dict(), "status": "complete"})
+    return _universal_census_exit(validation.counts)
 
 
 def _universal_census_exit(counts: UniversalCensusCounts) -> int:
@@ -586,6 +602,11 @@ def build_parser() -> argparse.ArgumentParser:
     census.add_argument("--shard-index", type=int)
     census.add_argument("--shard-count", type=int)
     census.add_argument(
+        "--split-depth",
+        type=int,
+        help="geng -X split depth; requires --shard-index and --shard-count",
+    )
+    census.add_argument(
         "--color-offset",
         type=int,
         default=2,
@@ -620,6 +641,11 @@ def build_parser() -> argparse.ArgumentParser:
     all_partitions.add_argument("--shard-index", type=int)
     all_partitions.add_argument("--shard-count", type=int)
     all_partitions.add_argument(
+        "--split-depth",
+        type=int,
+        help="geng -X split depth; requires --shard-index and --shard-count",
+    )
+    all_partitions.add_argument(
         "--check",
         action="append",
         type=_universal_check,
@@ -633,6 +659,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_limits(all_partitions)
     all_partitions.set_defaults(handler=_command_universal_census)
+
+    validate_shards = commands.add_parser(
+        "universal-validate-shards",
+        help="replay and validate one complete universal-census shard set",
+    )
+    validate_shards.add_argument(
+        "--run",
+        action="append",
+        required=True,
+        help="completed shard directory (repeat once for every shard)",
+    )
+    validate_shards.add_argument(
+        "--geng",
+        default="geng",
+        help="local geng executable used for exact stream regeneration",
+    )
+    validate_shards.add_argument(
+        "--max-union-graphs",
+        type=_positive_integer,
+        default=DEFAULT_MAX_UNION_GRAPHS,
+        help=(
+            "maximum graph6 records retained for exact union validation "
+            f"(default: {DEFAULT_MAX_UNION_GRAPHS})"
+        ),
+    )
+    validate_shards.set_defaults(handler=_command_universal_validate_shards)
 
     export = commands.add_parser(
         "universal-export",

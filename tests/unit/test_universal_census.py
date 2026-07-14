@@ -299,6 +299,58 @@ def test_public_completed_run_validation_reconstructs_provenance_read_only(
     assert not (run_directory / ".census.lock").exists()
 
 
+def test_split_depth_round_trips_through_v1_generator_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_generator(monkeypatch, (cycle(4), complete(4)))
+    run_directory = tmp_path / "run"
+    config = UniversalCensusConfig(GengSpec(4, shard_index=1, shard_count=3, split_depth=2))
+    expected = run_universal_census(config, run_directory, toolkit_identity=TEST_TOOLKIT)
+    manifest = json.loads(expected.manifest_path.read_text(encoding="utf-8"))
+
+    assert "split_depth" not in manifest["provenance"]["config"]["generator_spec"]
+    assert manifest["provenance"]["generator"]["arguments"] == [
+        "-q",
+        "-X2",
+        "4",
+        "1/3",
+    ]
+
+    validated = validate_completed_universal_census(run_directory)
+
+    assert validated.config == config
+    assert validated.generator.arguments == ("-q", "-X2", "4", "1/3")
+    assert validated.result == replace(expected, resumed_records=expected.record_count)
+
+
+def test_split_depth_provenance_rejects_noncanonical_or_misplaced_tokens(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patch_generator(monkeypatch, (cycle(4),))
+    result = run_universal_census(
+        UniversalCensusConfig(GengSpec(4, shard_index=1, shard_count=3, split_depth=2)),
+        tmp_path,
+        toolkit_identity=TEST_TOOLKIT,
+    )
+    pristine = json.loads(result.manifest_path.read_text(encoding="utf-8"))["provenance"]
+    malformed_arguments = (
+        ("-q", "-X02", "4", "1/3"),
+        ("-q", "-X+2", "4", "1/3"),
+        ("-q", "-X-2", "4", "1/3"),
+        ("-q", "-X", "4", "1/3"),
+        ("-q", "-X2", "-X2", "4", "1/3"),
+        ("-q", "4", "-X2", "1/3"),
+        ("-q", "-X2", "4", "2/3"),
+        ("-q", "-X2", "4"),
+    )
+
+    for arguments in malformed_arguments:
+        candidate = copy.deepcopy(pristine)
+        candidate["generator"]["arguments"] = list(arguments)
+        with pytest.raises(CensusFormatError, match="generator arguments do not match"):
+            universal._parse_completed_provenance(candidate)
+
+
 def test_public_completed_run_validation_rejects_provenance_and_generator_tampering(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

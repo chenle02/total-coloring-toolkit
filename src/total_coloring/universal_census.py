@@ -12,7 +12,7 @@ import hashlib
 import math
 import os
 from collections.abc import Iterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cache
 from pathlib import Path
@@ -901,6 +901,41 @@ def _require_optional_integer(value: object, name: str) -> int | None:
     return _require_nonnegative_int(value, name=name)
 
 
+def _infer_split_depth(arguments: tuple[str, ...], base_spec: GengSpec) -> int | None:
+    """Recover an optional canonical ``-X`` token without changing the v1 config shape."""
+
+    base_arguments = base_spec.arguments()
+    if arguments == base_arguments:
+        return None
+    if (
+        len(arguments) != len(base_arguments) + 1
+        or arguments[:1] != ("-q",)
+        or arguments[2:] != base_arguments[1:]
+    ):
+        raise CensusFormatError("generator arguments do not match the reconstructed config")
+    token = arguments[1]
+    encoded = token[2:] if token.startswith("-X") else ""
+    if not encoded or not encoded.isascii() or not encoded.isdigit():
+        raise CensusFormatError("generator arguments do not match the reconstructed config")
+    try:
+        split_depth = int(encoded)
+    except ValueError as exc:
+        raise CensusFormatError(
+            "generator arguments do not match the reconstructed config"
+        ) from exc
+    if encoded != str(split_depth):
+        raise CensusFormatError("generator arguments do not match the reconstructed config")
+    try:
+        split_spec = replace(base_spec, split_depth=split_depth)
+    except ValueError as exc:
+        raise CensusFormatError(
+            "generator arguments do not match the reconstructed config"
+        ) from exc
+    if split_spec.arguments() != arguments:
+        raise CensusFormatError("generator arguments do not match the reconstructed config")
+    return split_depth
+
+
 def _parse_completed_provenance(
     value: Mapping[str, object],
 ) -> tuple[UniversalCensusConfig, GengIdentity, ToolkitIdentity]:
@@ -972,6 +1007,19 @@ def _parse_completed_provenance(
         {"max_nodes_per_check", "timeout_seconds_per_check"},
         name="universal search limits",
     )
+    _require_exact_keys(
+        generator_value,
+        {"arguments", "executable", "name", "sha256"},
+        name="universal generator identity",
+    )
+    if generator_value["name"] != "nauty-geng":
+        raise CensusFormatError("unsupported universal generator name")
+    raw_arguments = generator_value["arguments"]
+    if isinstance(raw_arguments, str | bytes) or not isinstance(raw_arguments, Sequence):
+        raise CensusFormatError("generator arguments must be an array")
+    if not all(isinstance(argument, str) for argument in raw_arguments):
+        raise CensusFormatError("generator arguments must be strings")
+    generator_arguments = tuple(cast(Sequence[str], raw_arguments))
     try:
         checks: list[UniversalCheckSpec] = []
         for index, raw_check in enumerate(raw_checks):
@@ -986,23 +1034,25 @@ def _parse_completed_provenance(
             isinstance(timeout, bool) or not isinstance(timeout, int | float)
         ):
             raise CensusFormatError("timeout_seconds_per_check must be numeric or null")
-        config = UniversalCensusConfig(
-            geng=GengSpec(
-                order=_require_nonnegative_int(generator_spec["order"], name="generator order"),
-                connected=_require_boolean(generator_spec["connected"], "generator connected"),
-                min_degree=_require_optional_integer(
-                    generator_spec["min_degree"], "generator min_degree"
-                ),
-                max_degree=_require_optional_integer(
-                    generator_spec["max_degree"], "generator max_degree"
-                ),
-                shard_index=_require_optional_integer(
-                    generator_spec["shard_index"], "generator shard_index"
-                ),
-                shard_count=_require_optional_integer(
-                    generator_spec["shard_count"], "generator shard_count"
-                ),
+        base_geng = GengSpec(
+            order=_require_nonnegative_int(generator_spec["order"], name="generator order"),
+            connected=_require_boolean(generator_spec["connected"], "generator connected"),
+            min_degree=_require_optional_integer(
+                generator_spec["min_degree"], "generator min_degree"
             ),
+            max_degree=_require_optional_integer(
+                generator_spec["max_degree"], "generator max_degree"
+            ),
+            shard_index=_require_optional_integer(
+                generator_spec["shard_index"], "generator shard_index"
+            ),
+            shard_count=_require_optional_integer(
+                generator_spec["shard_count"], "generator shard_count"
+            ),
+        )
+        split_depth = _infer_split_depth(generator_arguments, base_geng)
+        config = UniversalCensusConfig(
+            geng=replace(base_geng, split_depth=split_depth),
             checks=tuple(checks),
             require_high_degree=_require_boolean(
                 filters["require_high_degree"], "require_high_degree"
@@ -1018,23 +1068,11 @@ def _parse_completed_provenance(
     except ValueError as exc:
         raise CensusFormatError(f"invalid universal config: {exc}") from exc
 
-    _require_exact_keys(
-        generator_value,
-        {"arguments", "executable", "name", "sha256"},
-        name="universal generator identity",
-    )
-    if generator_value["name"] != "nauty-geng":
-        raise CensusFormatError("unsupported universal generator name")
-    raw_arguments = generator_value["arguments"]
-    if isinstance(raw_arguments, str | bytes) or not isinstance(raw_arguments, Sequence):
-        raise CensusFormatError("generator arguments must be an array")
-    if not all(isinstance(argument, str) for argument in raw_arguments):
-        raise CensusFormatError("generator arguments must be strings")
     try:
         generator = GengIdentity(
             executable=_require_string(generator_value["executable"], "generator executable"),
             sha256=_require_digest(generator_value["sha256"], name="generator sha256"),
-            arguments=tuple(cast(Sequence[str], raw_arguments)),
+            arguments=generator_arguments,
         )
         _generator_dict(generator)
     except ValueError as exc:

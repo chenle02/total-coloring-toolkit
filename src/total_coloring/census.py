@@ -14,6 +14,8 @@ import math
 import os
 import platform
 import tempfile
+import zipfile
+import zipimport
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
@@ -116,20 +118,41 @@ class ToolkitIdentity:
 def detect_toolkit_identity() -> ToolkitIdentity:
     """Hash the installed package sources and record the interpreter identity."""
 
-    package_root = Path(__file__).resolve().parent
-    members = tuple(
-        path
-        for path in sorted(package_root.rglob("*"), key=lambda item: item.as_posix())
-        if path.is_file() and (path.suffix == ".py" or path.name == "py.typed")
-    )
-    inventory = [
-        {
-            "path": path.relative_to(package_root).as_posix(),
-            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-            "size": path.stat().st_size,
-        }
-        for path in members
-    ]
+    loader = globals().get("__loader__")
+    if isinstance(loader, zipimport.zipimporter):
+        prefix = loader.prefix
+        with zipfile.ZipFile(loader.archive) as archive:
+            names = tuple(
+                name
+                for name in sorted(archive.namelist())
+                if name.startswith(prefix)
+                and (name.endswith(".py") or name.removeprefix(prefix) == "py.typed")
+            )
+            inventory = []
+            for name in names:
+                source = archive.read(name)
+                inventory.append(
+                    {
+                        "path": name.removeprefix(prefix),
+                        "sha256": hashlib.sha256(source).hexdigest(),
+                        "size": len(source),
+                    }
+                )
+    else:
+        package_root = Path(__file__).resolve().parent
+        members = tuple(
+            path
+            for path in sorted(package_root.rglob("*"), key=lambda item: item.as_posix())
+            if path.is_file() and (path.suffix == ".py" or path.name == "py.typed")
+        )
+        inventory = [
+            {
+                "path": path.relative_to(package_root).as_posix(),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "size": path.stat().st_size,
+            }
+            for path in members
+        ]
     return ToolkitIdentity(
         distribution_version=__version__,
         source_sha256=sha256_hex(inventory),

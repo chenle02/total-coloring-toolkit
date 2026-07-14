@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "total-coloring-toolkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Exact, proof-carrying verification and search tools for total graph coloring"
 readme = "README.md"
 requires-python = ">=3.11"
