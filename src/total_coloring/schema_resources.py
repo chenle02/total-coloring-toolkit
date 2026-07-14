@@ -23,11 +23,13 @@ class SchemaName(StrEnum):
     CENSUS_COMPLETION_V1 = "census-completion-v1.schema.json"
     CENSUS_MANIFEST_V1 = "census-manifest-v1.schema.json"
     CENSUS_RECORD_V1 = "census-record-v1.schema.json"
+    DATASET_MANIFEST_V2 = "dataset-manifest-v2.schema.json"
     GRAPH_V1 = "graph-v1.schema.json"
     TOTAL_COLORING_CERTIFICATE_V1 = "total-coloring-certificate-v1.schema.json"
     UNIVERSAL_CENSUS_COMPLETION_V1 = "universal-census-completion-v1.schema.json"
     UNIVERSAL_CENSUS_MANIFEST_V1 = "universal-census-manifest-v1.schema.json"
     UNIVERSAL_CENSUS_RECORD_V1 = "universal-census-record-v1.schema.json"
+    UNIVERSAL_CENSUS_SUMMARY_V1 = "universal-census-summary-v1.schema.json"
 
 
 _SCHEMA_NAMES = tuple(sorted(SchemaName, key=lambda name: name.value))

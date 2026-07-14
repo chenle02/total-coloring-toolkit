@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Sequence
 from contextlib import suppress
 from fractions import Fraction
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, TextIO
 
 from total_coloring import __version__
@@ -36,6 +36,11 @@ from total_coloring.universal_census import (
     UniversalCensusCounts,
     UniversalCheckSpec,
     run_universal_census,
+)
+from total_coloring.universal_release import (
+    UniversalReleaseConfig,
+    UniversalReleaseError,
+    export_universal_release,
 )
 
 EXIT_SUCCESS = 0
@@ -441,6 +446,43 @@ def _universal_census_exit(counts: UniversalCensusCounts) -> int:
     return EXIT_SUCCESS
 
 
+def _command_universal_export(arguments: argparse.Namespace) -> int:
+    result = export_universal_release(
+        arguments.run,
+        UniversalReleaseConfig(
+            bundle_root=Path(arguments.bundle),
+            archive_path=Path(arguments.archive),
+            summary_id=arguments.summary_id,
+            created_utc=arguments.created_utc,
+            release_version=arguments.release_version,
+            release_status=arguments.release_status,
+            code_commit=arguments.code_commit,
+            code_repository=arguments.code_repository,
+            dataset_repository=arguments.dataset_repository,
+            external_artifact=PurePosixPath(arguments.external_name),
+            external_url=arguments.external_url,
+            claim_id=arguments.claim_id,
+            expected_toolkit_source_sha256=arguments.expected_toolkit_source_sha256,
+            expected_generator_sha256=arguments.expected_generator_sha256,
+        ),
+        executable=arguments.geng,
+    )
+    _emit(
+        {
+            "archive_bytes": result.archive_bytes,
+            "archive_path": str(result.archive_path),
+            "archive_sha256": result.archive_sha256,
+            "bundle_root": str(result.bundle_root),
+            "manifest_path": str(result.manifest_path),
+            "orders": list(result.orders),
+            "status": "complete",
+            "summary_path": str(result.summary_path),
+            "totals": result.totals,
+        }
+    )
+    return EXIT_SUCCESS
+
+
 def _add_graph_input(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--graph", required=True, help="graph JSON/graph6 path, or - for stdin")
     parser.add_argument(
@@ -591,6 +633,47 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_limits(all_partitions)
     all_partitions.set_defaults(handler=_command_universal_census)
+
+    export = commands.add_parser(
+        "universal-export",
+        help="replay completed universal runs and build a deterministic public candidate",
+    )
+    export.add_argument(
+        "--run",
+        action="append",
+        required=True,
+        help="completed per-order universal-census directory (repeat in any order)",
+    )
+    export.add_argument("--bundle", required=True, help="new compact candidate-bundle path")
+    export.add_argument("--archive", required=True, help="new external replay .tar.gz path")
+    export.add_argument("--summary-id", required=True)
+    export.add_argument("--created-utc", required=True, help="canonical YYYY-MM-DDTHH:MM:SSZ")
+    export.add_argument("--release-version", required=True, help="candidate dataset SemVer")
+    export.add_argument("--release-status", choices=("candidate", "published"), default="candidate")
+    export.add_argument("--code-commit", required=True, help="generating 40-hex toolkit commit")
+    export.add_argument(
+        "--code-repository",
+        default="https://github.com/chenle02/total-coloring-toolkit",
+    )
+    export.add_argument(
+        "--dataset-repository",
+        default="https://github.com/chenle02/total-coloring-data",
+    )
+    export.add_argument(
+        "--external-name",
+        required=True,
+        help="logical release-asset name, e.g. archives/order-1-8-replay-v1.tar.gz",
+    )
+    export.add_argument("--external-url", required=True, help="future stable HTTPS release URL")
+    export.add_argument("--claim-id", default="UAUX-BOUND")
+    export.add_argument("--expected-toolkit-source-sha256")
+    export.add_argument("--expected-generator-sha256")
+    export.add_argument(
+        "--geng",
+        default="geng",
+        help="local geng executable used for exact stream regeneration",
+    )
+    export.set_defaults(handler=_command_universal_export)
     return parser
 
 
@@ -602,7 +685,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         handler = arguments.handler
         return int(handler(arguments))
-    except (CensusError, CliError, GengError, OSError, ValueError) as exc:
+    except (CensusError, CliError, GengError, OSError, UniversalReleaseError, ValueError) as exc:
         _emit({"error": str(exc), "status": "error"}, stream=sys.stderr)
         return EXIT_ERROR
 

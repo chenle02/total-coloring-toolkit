@@ -118,14 +118,32 @@ def test_graph_json_rejects_malformed_or_noncanonical_documents(document: str) -
 def test_strict_json_and_canonical_json_reject_nonstandard_values() -> None:
     with pytest.raises(GraphFormatError, match="non-finite"):
         strict_json_loads('{"x": NaN}')
+    with pytest.raises(GraphFormatError, match="non-finite"):
+        strict_json_loads('{"x": 1e309}')
     with pytest.raises(GraphFormatError, match="duplicate"):
         strict_json_loads('{"x": 1, "x": 2}')
+    with pytest.raises(GraphFormatError, match="surrogate"):
+        strict_json_loads(b'"\\ud800"')
+    with pytest.raises(GraphFormatError, match="canonical-JSON"):
+        canonical_json_bytes("\ud800")
     with pytest.raises(GraphFormatError, match="canonical-JSON"):
         canonical_json_bytes({"not-json": object()})
     with pytest.raises(GraphFormatError, match="str or bytes"):
         strict_json_loads(1)  # type: ignore[arg-type]
     with pytest.raises(GraphFormatError, match="JSON object"):
         SimpleGraph.from_dict([])  # type: ignore[arg-type]
+
+
+def test_strict_json_parser_enforces_resource_bounds() -> None:
+    with pytest.raises(GraphFormatError, match="integer exceeds"):
+        strict_json_loads("1" * 129)
+    with pytest.raises(GraphFormatError, match="nesting exceeds"):
+        strict_json_loads("[" * 129 + "0" + "]" * 129)
+    with pytest.raises(GraphFormatError, match="input exceeds"):
+        strict_json_loads('"1234"', max_bytes=4)
+    with pytest.raises(GraphFormatError, match="limits"):
+        strict_json_loads("0", max_depth=0)
+    assert strict_json_loads('{"text":"[[[{}]]]"}', max_depth=1) == {"text": "[[[{}]]]"}
 
 
 def test_canonical_json_is_independent_of_mapping_insertion_order() -> None:

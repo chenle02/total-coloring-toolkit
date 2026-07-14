@@ -768,6 +768,16 @@ def test_low_level_identity_and_document_guards(tmp_path: Path) -> None:
         census._load_canonical_json(spaced)
 
 
+def test_canonical_metadata_loader_enforces_size_bound(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(census, "MAX_CENSUS_METADATA_BYTES", 4)
+    oversized = tmp_path / "manifest.json"
+    oversized.write_bytes(b"{}\n  ")
+    with pytest.raises(CensusFormatError, match="metadata bytes"):
+        census._load_canonical_json(oversized)
+
+
 def test_graph_processing_defensive_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

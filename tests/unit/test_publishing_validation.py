@@ -10,18 +10,41 @@ from typing import Any
 import pytest
 from test_publishing import _config, _make_destination, _make_source, _write_json
 
+import total_coloring.publishing as publishing
 from total_coloring.publishing import (
     BundleVerificationError,
     PublicationConfig,
     PublishingError,
     RepositoryStateError,
     _format_matches,
+    _load_json,
     _parse_checksums,
+    _parse_semver,
     _safe_relative_path,
     _type_matches,
     _validate_document,
     plan_promotion,
 )
+
+
+def test_bundle_json_loader_fails_closed_on_resource_exhaustion_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    huge_integer = tmp_path / "huge-integer.json"
+    huge_integer.write_text('{"value":' + "1" * 5_000 + "}", encoding="utf-8")
+    with pytest.raises(BundleVerificationError, match="integer exceeds"):
+        _load_json(huge_integer, "fixture")
+
+    nested = tmp_path / "nested.json"
+    nested.write_text("[" * 129 + "0" + "]" * 129, encoding="utf-8")
+    with pytest.raises(BundleVerificationError, match="nesting exceeds"):
+        _load_json(nested, "fixture")
+
+    monkeypatch.setattr(publishing, "_MAX_BUNDLE_JSON_BYTES", 4)
+    oversized = tmp_path / "oversized.json"
+    oversized.write_bytes(b"12345")
+    with pytest.raises(BundleVerificationError, match="JSON exceeds 4 bytes"):
+        _load_json(oversized, "fixture")
 
 
 @pytest.mark.parametrize("value", ["", "../escape", "/absolute", "a\\b", "a/./b", "a\nb"])
@@ -73,6 +96,25 @@ def test_unknown_json_schema_type_fails_closed() -> None:
         ("../a.json", "relative-path", False),
         ("https://example.org/data", "uri", True),
         ("file:///tmp/data", "uri", False),
+        ("https://[bad/data", "uri", False),
+        ("https://example.org/archive.tar.gz", "https-uri", True),
+        ("HTTPS://example.org/archive.tar.gz", "https-uri", False),
+        ("http://example.org/archive.tar.gz", "https-uri", False),
+        ("https://user@example.org/archive.tar.gz", "https-uri", False),
+        ("https://example.org:443/archive.tar.gz", "https-uri", False),
+        ("https://Example.org/archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/../archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/%2e%2e/archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/%41/archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/%2F/archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/%zz/archive.tar.gz", "https-uri", False),
+        ("https://example.org/a/%ff/archive.tar.gz", "https-uri", False),
+        ("https://example.org//archive.tar.gz", "https-uri", False),
+        ("https://example.org/archive.tar.gz?download=1", "https-uri", False),
+        ("https://example.org/a b/archive.tar.gz", "https-uri", False),
+        ("https://localhost/archive.tar.gz", "https-uri", False),
+        ("https://-bad.example/archive.tar.gz", "https-uri", False),
+        ("https://[bad/archive.tar.gz", "https-uri", False),
         ("2026-07-14T03:00:00Z", "date-time", True),
         ("2026-07-14", "date-time", False),
         ("not-a-date", "date-time", False),
@@ -85,6 +127,31 @@ def test_supported_json_schema_formats(value: str, format_name: str, answer: boo
 def test_unknown_json_schema_format_fails_closed() -> None:
     with pytest.raises(BundleVerificationError, match="unsupported JSON Schema format"):
         _format_matches("x", "hostname")
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        "01.2.3",
+        "1.02.3",
+        "1.2.03",
+        "1.2.3-01",
+        "1.2.3-rc..1",
+        "1.2.3-",
+        "1.2.3+build.1",
+        "1.2.3\n",
+        "1.2.3\r",
+    ),
+)
+def test_release_semver_is_canonical_and_forbids_build_metadata(value: str) -> None:
+    assert _parse_semver("1.2.3-rc.1") == (("1", "2", "3"), ("rc", "1"))
+    with pytest.raises(BundleVerificationError, match="canonical SemVer"):
+        _parse_semver(value)
+
+
+def test_release_semver_rejects_long_near_miss_without_backtracking_blowup() -> None:
+    with pytest.raises(BundleVerificationError, match="canonical SemVer"):
+        _parse_semver("1.2.3-" + "a" * 20_000 + "+")
 
 
 @pytest.mark.parametrize(
@@ -110,6 +177,10 @@ def test_unknown_json_schema_format_fails_closed() -> None:
             "property is not allowed",
         ),
         (["x"], {"type": "array", "items": {"type": "integer"}}, "expected integer"),
+        ([], {"type": "array", "minItems": 1}, "minimum item count"),
+        ([1, 2], {"type": "array", "maxItems": 1}, "maximum item count"),
+        ([], {"type": "array", "minItems": -1}, "must be a nonnegative integer"),
+        ([], {"type": "array", "minItems": 2, "maxItems": 1}, "may not exceed"),
     ],
 )
 def test_schema_subset_rejects_invalid_documents(
@@ -142,6 +213,26 @@ def test_checksum_parser_fails_closed(tmp_path: Path, contents: str, message: st
     checksums = tmp_path / "SHA256SUMS"
     checksums.write_text(contents, encoding="utf-8")
     with pytest.raises(BundleVerificationError, match=message):
+        _parse_checksums(checksums)
+
+
+def test_checksum_parser_rejects_invalid_utf8_and_oversized_input(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    checksums = tmp_path / "SHA256SUMS"
+    checksums.write_bytes(b"\xff")
+    with pytest.raises(BundleVerificationError, match="valid UTF-8"):
+        _parse_checksums(checksums)
+
+    monkeypatch.setattr(publishing, "_MAX_CHECKSUM_FILE_BYTES", 4)
+    checksums.write_bytes(b"12345")
+    with pytest.raises(BundleVerificationError, match="exceeds 4 bytes"):
+        _parse_checksums(checksums)
+
+    monkeypatch.setattr(publishing, "_MAX_CHECKSUM_FILE_BYTES", 16)
+    monkeypatch.setattr(publishing, "_MAX_CHECKSUM_LINE_BYTES", 4)
+    checksums.write_bytes(b"1234\n")
+    with pytest.raises(BundleVerificationError, match="line exceeding 4 bytes including LF"):
         _parse_checksums(checksums)
 
 
@@ -202,6 +293,7 @@ def test_missing_and_symlinked_control_files_are_rejected(tmp_path: Path) -> Non
 )
 def test_manifest_structural_guards(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: Callable[[dict[str, Any]], None],
     message: str,
 ) -> None:
@@ -211,6 +303,13 @@ def test_manifest_structural_guards(
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     mutation(manifest)
     _write_json(manifest_path, manifest)
+    monkeypatch.setattr(
+        publishing,
+        "_managed_files",
+        lambda *_args, **_kwargs: pytest.fail(
+            "managed-root traversal must not run for a schema-invalid manifest"
+        ),
+    )
     with pytest.raises(BundleVerificationError, match=message):
         plan_promotion(_config(source, destination))
 
@@ -223,6 +322,30 @@ def test_candidate_cannot_weaken_the_trusted_manifest_schema(tmp_path: Path) -> 
     schema["properties"] = {}
     _write_json(schema_path, schema)
     with pytest.raises(BundleVerificationError, match="trusted canonical schema"):
+        plan_promotion(_config(source, destination))
+
+
+@pytest.mark.parametrize(
+    "version",
+    (
+        "01.0.0",
+        "1.00.0",
+        "1.0.00",
+        "1.0.0-01",
+        "1.0.0-rc..1",
+        "1.0.0+build.1",
+        "1.0.0\n",
+        "1.0.0\r",
+    ),
+)
+def test_v1_manifest_rejects_noncanonical_release_versions(tmp_path: Path, version: str) -> None:
+    source = _make_source(tmp_path / "source")
+    destination = _make_destination(tmp_path / "destination")
+    manifest_path = source / "manifests/dataset-manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["release"]["version"] = version
+    _write_json(manifest_path, manifest)
+    with pytest.raises(BundleVerificationError, match="does not match"):
         plan_promotion(_config(source, destination))
 
 
