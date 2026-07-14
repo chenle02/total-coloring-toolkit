@@ -108,9 +108,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-runtime-bootstrap" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.0-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.0 \
+  --toolkit-version 0.2.1 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz"
 ```
 
@@ -138,9 +138,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-order8" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.0-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.0 \
+  --toolkit-version 0.2.1 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz" \
   --geng-sha256 "$GENG_SHA256" \
   --runtime-receipt-sha256 "$RUNTIME_RECEIPT_SHA256"
