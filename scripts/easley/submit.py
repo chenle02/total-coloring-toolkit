@@ -82,7 +82,7 @@ PROFILES: Final = {
         checks=79_903_890,
         census_time="02:00:00",
         exact_partition="nova_long",
-        exact_time="24:00:00",
+        exact_time="1-00:00:00",
     ),
 }
 

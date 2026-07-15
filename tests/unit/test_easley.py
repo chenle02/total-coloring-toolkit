@@ -1164,12 +1164,12 @@ def test_partial_submission_is_journaled_and_cancelled(
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         nonlocal sbatch_calls
         del kwargs
-        if command[0] == "sbatch":
+        if Path(command[0]).name == "sbatch":
             sbatch_calls += 1
             if sbatch_calls == 1:
                 return subprocess.CompletedProcess(command, 0, stdout="12345\n", stderr="")
             return subprocess.CompletedProcess(command, 1, stdout="", stderr="synthetic failure")
-        assert command[0] == "scancel"
+        assert Path(command[0]).name == "scancel"
         cancelled.append(command[1])
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -1237,7 +1237,7 @@ def test_order9_submission_uses_full_high_throughput_arrays(
 
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         del kwargs
-        assert command[0] == "sbatch"
+        assert Path(command[0]).name == "sbatch"
         submitted.append(command)
         return subprocess.CompletedProcess(
             command,
@@ -1297,7 +1297,7 @@ def test_order9_submission_uses_full_high_throughput_arrays(
     assert "--array=0-2047%2048" in census
     assert "--array=0-2047%2048" in validation
     assert "--partition=nova_long" in submitted[5]
-    assert "--time=24:00:00" in submitted[5]
+    assert "--time=1-00:00:00" in submitted[5]
 
 
 def test_submitter_atomically_rejects_an_existing_scratch_root(
@@ -1361,12 +1361,12 @@ def test_controlled_submission_interruption_cancels_recorded_jobs(
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         nonlocal sbatch_calls
         del kwargs
-        if command[0] == "sbatch":
+        if Path(command[0]).name == "sbatch":
             sbatch_calls += 1
             if sbatch_calls == 1:
                 return subprocess.CompletedProcess(command, 0, stdout="777\n", stderr="")
             raise SubmissionInterrupted("synthetic SIGTERM")
-        assert command[0] == "scancel"
+        assert Path(command[0]).name == "scancel"
         cancelled.append(command[1])
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
