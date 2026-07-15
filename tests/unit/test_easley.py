@@ -1297,6 +1297,7 @@ def test_order9_submission_uses_full_high_throughput_arrays(
     assert "--array=0-2047%2048" in census
     assert "--array=0-2047%2048" in validation
     assert "--partition=nova_long" in submitted[5]
+    assert "--time=24:00:00" in submitted[5]
 
 
 def test_submitter_atomically_rejects_an_existing_scratch_root(

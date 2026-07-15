@@ -9,6 +9,8 @@ All notable changes are documented here. The project follows
 
 - Scale the sealed order-nine Easley profile from 64 to 2,048 `geng -X2`
   shards, with a profile-default 2,048-task throttle on `nova_short`.
+- Give the serial order-nine exact-union replay a 24-hour `nova_long` walltime
+  so its global disjointness and EOF gate has measured scaling headroom.
 - Require every Easley stage to reject shard counts that are not powers of two
   or exceed the current safe 2,048-shard campaign bound, while retaining the
   golden order-eight prerequisite at exactly 64 shards.

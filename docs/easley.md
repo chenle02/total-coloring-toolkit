@@ -78,8 +78,10 @@ profile uses 2,048 shards and, by default, permits all 2,048 census or
 validation tasks to run concurrently on `nova_short`; Slurm may start fewer
 when the partition has less free capacity. Its two arrays plus four singleton
 stages remain below Easley's 5,001-job submission cap, while the exact-union
-receipt remains below the four-MiB metadata limit. `--array-concurrency` may
-lower the throttle without changing the shard decomposition.
+receipt remains below the four-MiB metadata limit. The serial exact-union gate
+runs on `nova_long` with a 24-hour walltime because its full-stream replay is
+the campaign's expected tail. `--array-concurrency` may lower the throttle
+without changing the shard decomposition.
 
 The census array receives `USR1` five minutes before walltime. The Python
 handler lets the graph-level checkpoint and lock close cleanly, then asks Slurm
