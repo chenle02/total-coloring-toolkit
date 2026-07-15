@@ -10,6 +10,7 @@ from pathlib import Path
 from scripts.easley.common import (
     CampaignError,
     atomic_json,
+    easley_shard_count_env,
     load_json,
     nonnegative_env,
     positive_env,
@@ -29,7 +30,7 @@ def main() -> int:
         raise CampaignError("validation task must run under Slurm")
     index = nonnegative_env("SLURM_ARRAY_TASK_ID")
     order = positive_env("TC_ORDER")
-    shard_count = positive_env("TC_SHARDS")
+    shard_count = easley_shard_count_env()
     split_depth = nonnegative_env("TC_SPLIT_DEPTH")
     if index >= shard_count:
         raise CampaignError("array task index lies outside the configured shard set")

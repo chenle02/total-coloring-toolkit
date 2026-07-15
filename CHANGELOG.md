@@ -5,6 +5,20 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Scale the sealed order-nine Easley profile from 64 to 2,048 `geng -X2`
+  shards, with a profile-default 2,048-task throttle on `nova_short`.
+- Require every Easley stage to reject shard counts that are not powers of two
+  or exceed the current safe 2,048-shard campaign bound, while retaining the
+  golden order-eight prerequisite at exactly 64 shards.
+
+### Fixed
+
+- Discover `sbatch`, `scancel`, and `scontrol` through Easley's stable Slurm
+  installation when module operations remove the scheduler directory from
+  `PATH`.
+
 ## [0.2.1] - 2026-07-14
 
 ### Fixed

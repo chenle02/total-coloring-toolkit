@@ -26,10 +26,12 @@ from scripts.easley.common import (
     launcher_files,
     launcher_sha256,
     load_json_with_snapshot,
+    require_easley_shard_count,
     require_no_python_bytecode,
     require_readonly_tree,
     require_regular_file,
     sha256_file,
+    slurm_command,
 )
 from scripts.easley.prerequisite import RUNTIME_SCHEMA, validate_order8_prerequisite
 
@@ -39,6 +41,8 @@ class Profile:
     order: int
     shards: int
     split_depth: int
+    array_concurrency: int
+    array_partition: str
     records: int
     verified: int
     skipped: int
@@ -54,6 +58,8 @@ PROFILES: Final = {
         order=8,
         shards=64,
         split_depth=2,
+        array_concurrency=64,
+        array_partition="nova_short",
         records=12_346,
         verified=11_922,
         skipped=424,
@@ -65,8 +71,10 @@ PROFILES: Final = {
     ),
     "order9-production": Profile(
         order=9,
-        shards=64,
+        shards=2048,
         split_depth=2,
+        array_concurrency=2048,
+        array_partition="nova_short",
         records=274_668,
         verified=259_197,
         skipped=15_471,
@@ -96,7 +104,11 @@ def _parser() -> argparse.ArgumentParser:
         "--order8-receipt",
         help="required exact-union completion receipt for order9-production",
     )
-    parser.add_argument("--array-concurrency", type=int, default=64)
+    parser.add_argument(
+        "--array-concurrency",
+        type=int,
+        help="maximum simultaneously running array tasks; defaults to the profile target",
+    )
     parser.add_argument(
         "--bootstrap-only",
         action="store_true",
@@ -533,15 +545,16 @@ def _base_sbatch(
 
 
 def _submit(command: list[str]) -> str:
+    resolved = [slurm_command("sbatch"), *command[1:]]
     completed = subprocess.run(
-        command,
+        resolved,
         text=True,
         capture_output=True,
         check=False,
     )
     if completed.returncode != 0:
         raise CampaignError(
-            f"sbatch failed ({completed.returncode}): {' '.join(command)}\n{completed.stderr}"
+            f"sbatch failed ({completed.returncode}): {' '.join(resolved)}\n{completed.stderr}"
         )
     job_id = completed.stdout.strip().split(";", 1)[0]
     if not job_id.isdigit():
@@ -619,7 +632,15 @@ def _defer_submission_signals() -> Iterator[None]:
 def main(argv: list[str] | None = None) -> int:
     arguments = _parser().parse_args(argv)
     profile = PROFILES[arguments.profile]
-    if arguments.array_concurrency <= 0 or arguments.array_concurrency > profile.shards:
+    shard_count = require_easley_shard_count(
+        profile.shards, name=f"{arguments.profile} shard count"
+    )
+    array_concurrency = (
+        profile.array_concurrency
+        if arguments.array_concurrency is None
+        else arguments.array_concurrency
+    )
+    if array_concurrency <= 0 or array_concurrency > shard_count:
         raise CampaignError("array concurrency must lie between 1 and the shard count")
     if arguments.bootstrap_only and arguments.profile != "order8-smoke":
         raise CampaignError("bootstrap-only mode is available only for the order8 profile")
@@ -671,6 +692,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     environment = {
         "TC_CAMPAIGN_MODE": "bootstrap_only" if arguments.bootstrap_only else "scientific",
+        "TC_ARRAY_CONCURRENCY": str(array_concurrency),
         "TC_CHECKPOINT_INTERVAL": "8",
         "TC_CODE_COMMIT": arguments.code_commit,
         "TC_EXPECTED_CHECKS": str(profile.checks),
@@ -685,7 +707,7 @@ def main(argv: list[str] | None = None) -> int:
         "TC_PROFILE": arguments.profile,
         "TC_RUNTIME": str(runtime),
         "TC_SCRATCH": str(scratch),
-        "TC_SHARDS": str(profile.shards),
+        "TC_SHARDS": str(shard_count),
         "TC_SPLIT_DEPTH": str(profile.split_depth),
         "TC_TOOLKIT_VERSION": arguments.toolkit_version,
         "TC_WHEEL": str(wheel),
@@ -828,13 +850,13 @@ def main(argv: list[str] | None = None) -> int:
             census = [
                 *_base_sbatch(
                     name=f"tc-o{profile.order}-census",
-                    partition="nova_short",
+                    partition=profile.array_partition,
                     time=profile.census_time,
                     memory="4G",
                     log=logs / "census-%A_%a.out",
                     environment=environment,
                 ),
-                f"--array=0-{profile.shards - 1}%{arguments.array_concurrency}",
+                f"--array=0-{shard_count - 1}%{array_concurrency}",
                 f"--dependency=afterok:{bootstrap_id}",
                 "--signal=B:USR1@300",
                 "--requeue",
@@ -846,13 +868,13 @@ def main(argv: list[str] | None = None) -> int:
             validation = [
                 *_base_sbatch(
                     name=f"tc-o{profile.order}-validate",
-                    partition="nova_short",
+                    partition=profile.array_partition,
                     time="01:00:00",
                     memory="4G",
                     log=logs / "validate-%A_%a.out",
                     environment=environment,
                 ),
-                f"--array=0-{profile.shards - 1}%{arguments.array_concurrency}",
+                f"--array=0-{shard_count - 1}%{array_concurrency}",
                 f"--dependency=afterany:{census_id}",
                 "--wrap",
                 _wrapper(runtime, "scripts.easley.validate_task"),
@@ -895,7 +917,7 @@ def main(argv: list[str] | None = None) -> int:
         cancellations: dict[str, object] = {}
         for name, job_id in reversed(tuple(job_ids.items())):
             cancelled = subprocess.run(
-                ["scancel", job_id],
+                [slurm_command("scancel"), job_id],
                 text=True,
                 capture_output=True,
                 check=False,

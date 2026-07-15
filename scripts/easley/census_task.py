@@ -12,6 +12,7 @@ from pathlib import Path
 from scripts.easley.common import (
     CampaignError,
     atomic_json,
+    easley_shard_count_env,
     nonnegative_env,
     positive_env,
     require_env,
@@ -19,6 +20,7 @@ from scripts.easley.common import (
     runtime_receipt_sha256,
     sha256_file,
     shard_directory,
+    slurm_command,
 )
 from total_coloring.census import CensusError
 from total_coloring.geng import GengSpec
@@ -46,7 +48,7 @@ def main() -> int:
         raise CampaignError("census task must run under Slurm")
     index = nonnegative_env("SLURM_ARRAY_TASK_ID")
     order = positive_env("TC_ORDER")
-    shard_count = positive_env("TC_SHARDS")
+    shard_count = easley_shard_count_env()
     split_depth = nonnegative_env("TC_SPLIT_DEPTH")
     checkpoint_interval = positive_env("TC_CHECKPOINT_INTERVAL")
     if index >= shard_count:
@@ -83,7 +85,7 @@ def main() -> int:
         )
     except RequeueRequested:
         completed = subprocess.run(
-            ["scontrol", "requeue", _requeue_target()],
+            [slurm_command("scontrol"), "requeue", _requeue_target()],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

@@ -10,6 +10,7 @@ from pathlib import Path
 from scripts.easley.common import (
     CampaignError,
     atomic_json,
+    easley_shard_count_env,
     load_json,
     positive_env,
     require_env,
@@ -32,7 +33,7 @@ def main() -> int:
         raise CampaignError("reducer must run under Slurm")
     _, _, runtime_receipt = runtime_paths()
     order = positive_env("TC_ORDER")
-    shard_count = positive_env("TC_SHARDS")
+    shard_count = easley_shard_count_env()
     scratch = Path(require_env("TC_SCRATCH")).resolve()
     status = scratch / "status"
     runtime_receipt_digest = runtime_receipt_sha256()

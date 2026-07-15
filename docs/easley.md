@@ -49,7 +49,7 @@ scientific submitter then creates five dependency-linked stages:
 
 1. `bootstrap`: validate the separately built, read-only runtime against the
    prior receipt and binary pins;
-2. `census-array`: 64 one-core, checkpoint-aware `-X2` shards;
+2. `census-array`: profile-bound, one-core, checkpoint-aware `-X2` shards;
 3. `validation-array`: independently replay every completed transcript and its
    exact shard generator stream;
 4. `reduce`: require all receipts, expected totals, three checks per partition,
@@ -71,6 +71,16 @@ The production dependency chain is therefore
 gate receipt and its order-eight receipt SHA-256; a direct final-stage launch
 without that gate fails.
 
+Shard counts are sealed profile data, not an unrecorded launcher tweak. Every
+login- and compute-side stage accepts only powers of two up to 2,048. The
+golden order-eight profile remains exactly 64 shards. The order-nine production
+profile uses 2,048 shards and, by default, permits all 2,048 census or
+validation tasks to run concurrently on `nova_short`; Slurm may start fewer
+when the partition has less free capacity. Its two arrays plus four singleton
+stages remain below Easley's 5,001-job submission cap, while the exact-union
+receipt remains below the four-MiB metadata limit. `--array-concurrency` may
+lower the throttle without changing the shard decomposition.
+
 The census array receives `USR1` five minutes before walltime. The Python
 handler lets the graph-level checkpoint and lock close cleanly, then asks Slurm
 to requeue that exact array element. The wrapper never deletes a stale lock;
@@ -91,6 +101,11 @@ find scripts/easley -type f -name '*.py' -exec chmod a-w {} +
 find scripts/easley -type d -exec chmod a-w {} +
 chmod a-w scripts/__init__.py scripts .
 ```
+
+The submitter normally discovers Slurm through `PATH`. If a preceding module
+operation removed that entry, it also checks Easley's stable
+`/cm/shared/apps/slurm/current/bin` installation for `sbatch` and `scancel`;
+checkpoint requeue uses the same fallback for `scontrol`.
 
 The `--scratch` path must not exist. On `--submit`, one process atomically
 reserves it, writes the hash-bound launcher ZIP and campaign contract, and
@@ -162,12 +177,12 @@ receipt SHA-256 are carried into the order-nine final receipt. Order nine
 inherits both runtime pins from the validated order-eight evidence; explicitly
 supplied runtime or `geng` pins must agree with that evidence.
 
-The built-in exact expectations are:
+The built-in exact expectations and scheduler profiles are:
 
-| Profile | Graphs | Verified | Skipped | Partitions | Checks |
-|---|---:|---:|---:|---:|---:|
-| `order8-smoke` | 12,346 | 11,922 | 424 | 514,050 | 1,542,150 |
-| `order9-production` | 274,668 | 259,197 | 15,471 | 26,634,630 | 79,903,890 |
+| Profile | Shards | Default concurrency | Graphs | Verified | Skipped | Partitions | Checks |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `order8-smoke` | 64 | 64 | 12,346 | 11,922 | 424 | 514,050 | 1,542,150 |
+| `order9-production` | 2,048 | 2,048 | 274,668 | 259,197 | 15,471 | 26,634,630 | 79,903,890 |
 
 The order-nine verified count is an acceptance gate, not an assumption hidden
 inside the solver: if any eligible graph has a candidate negative, incomplete
