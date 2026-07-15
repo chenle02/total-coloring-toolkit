@@ -125,9 +125,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-runtime-bootstrap" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.3.0-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.1 \
+  --toolkit-version 0.3.0 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz"
 ```
 
@@ -155,9 +155,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-order8" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.3.0-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.1 \
+  --toolkit-version 0.3.0 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz" \
   --geng-sha256 "$GENG_SHA256" \
   --runtime-receipt-sha256 "$RUNTIME_RECEIPT_SHA256"
@@ -167,6 +167,11 @@ Inspect the canonical JSON plan, then repeat Phase B with `--submit`. After the
 full order-eight pipeline produces its exact-union marker, use a separate
 scratch root and add `--profile order9-production` plus
 `--order8-receipt /scratch/$USER/CAMPAIGN-order8/status/exact-union-complete.json`.
+The bootstrap runtime and order-eight receipt must be produced from the same
+release commit, wheel, launcher archive and source identity, compiled `geng`,
+and runtime receipt used for order nine. A receipt or runtime from an earlier
+release—including v0.2.1—fails these pins by design; changing the version or
+release commit after Phase A or B requires repeating both phases.
 The login-side submitter validates the exact-union v1 field set, all 64 ordered `-X2`
 shard receipts and their sums, the canonical three-check matrix, the reduction
 receipt and its SHA-256, the immutable runtime receipt, launcher archive,
