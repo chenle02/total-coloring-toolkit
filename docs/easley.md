@@ -49,7 +49,7 @@ scientific submitter then creates five dependency-linked stages:
 
 1. `bootstrap`: validate the separately built, read-only runtime against the
    prior receipt and binary pins;
-2. `census-array`: 64 one-core, checkpoint-aware `-X2` shards;
+2. `census-array`: profile-bound, one-core, checkpoint-aware `-X2` shards;
 3. `validation-array`: independently replay every completed transcript and its
    exact shard generator stream;
 4. `reduce`: require all receipts, expected totals, three checks per partition,
@@ -70,6 +70,18 @@ The production dependency chain is therefore
 -> exact-union`. Bootstrap and the final exact-union stage both require the
 gate receipt and its order-eight receipt SHA-256; a direct final-stage launch
 without that gate fails.
+
+Shard counts are sealed profile data, not an unrecorded launcher tweak. Every
+login- and compute-side stage accepts only powers of two up to 2,048. The
+golden order-eight profile remains exactly 64 shards. The order-nine production
+profile uses 2,048 shards and, by default, permits all 2,048 census or
+validation tasks to run concurrently on `nova_short`; Slurm may start fewer
+when the partition has less free capacity. Its two arrays plus four singleton
+stages remain below Easley's 5,001-job submission cap, while the exact-union
+receipt remains below the four-MiB metadata limit. The serial exact-union gate
+runs on `nova_long` with a 24-hour walltime because its full-stream replay is
+the campaign's expected tail. `--array-concurrency` may lower the throttle
+without changing the shard decomposition.
 
 The census array receives `USR1` five minutes before walltime. The Python
 handler lets the graph-level checkpoint and lock close cleanly, then asks Slurm
@@ -92,6 +104,11 @@ find scripts/easley -type d -exec chmod a-w {} +
 chmod a-w scripts/__init__.py scripts .
 ```
 
+The submitter normally discovers Slurm through `PATH`. If a preceding module
+operation removed that entry, it also checks Easley's stable
+`/cm/shared/apps/slurm/current/bin` installation for `sbatch` and `scancel`;
+checkpoint requeue uses the same fallback for `scontrol`.
+
 The `--scratch` path must not exist. On `--submit`, one process atomically
 reserves it, writes the hash-bound launcher ZIP and campaign contract, and
 creates the journal before calling `sbatch`; a concurrent submitter therefore
@@ -108,9 +125,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-runtime-bootstrap" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.3.0-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.1 \
+  --toolkit-version 0.3.0 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz"
 ```
 
@@ -138,9 +155,9 @@ python -m scripts.easley.submit \
   --code-commit 40_HEX_GIT_COMMIT \
   --scratch "/scratch/$USER/CAMPAIGN-order8" \
   --runtime "$HOME/total-coloring/CAMPAIGN/runtime" \
-  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.2.1-py3-none-any.whl" \
+  --wheel "$HOME/total-coloring/CAMPAIGN/artifacts/total_coloring_toolkit-0.3.0-py3-none-any.whl" \
   --wheel-sha256 WHEEL_SHA256 \
-  --toolkit-version 0.2.1 \
+  --toolkit-version 0.3.0 \
   --nauty-tar "$HOME/total-coloring/CAMPAIGN/artifacts/nauty2_9_3.tar.gz" \
   --geng-sha256 "$GENG_SHA256" \
   --runtime-receipt-sha256 "$RUNTIME_RECEIPT_SHA256"
@@ -150,6 +167,11 @@ Inspect the canonical JSON plan, then repeat Phase B with `--submit`. After the
 full order-eight pipeline produces its exact-union marker, use a separate
 scratch root and add `--profile order9-production` plus
 `--order8-receipt /scratch/$USER/CAMPAIGN-order8/status/exact-union-complete.json`.
+The bootstrap runtime and order-eight receipt must be produced from the same
+release commit, wheel, launcher archive and source identity, compiled `geng`,
+and runtime receipt used for order nine. A receipt or runtime from an earlier
+release—including v0.2.1—fails these pins by design; changing the version or
+release commit after Phase A or B requires repeating both phases.
 The login-side submitter validates the exact-union v1 field set, all 64 ordered `-X2`
 shard receipts and their sums, the canonical three-check matrix, the reduction
 receipt and its SHA-256, the immutable runtime receipt, launcher archive,
@@ -162,12 +184,12 @@ receipt SHA-256 are carried into the order-nine final receipt. Order nine
 inherits both runtime pins from the validated order-eight evidence; explicitly
 supplied runtime or `geng` pins must agree with that evidence.
 
-The built-in exact expectations are:
+The built-in exact expectations and scheduler profiles are:
 
-| Profile | Graphs | Verified | Skipped | Partitions | Checks |
-|---|---:|---:|---:|---:|---:|
-| `order8-smoke` | 12,346 | 11,922 | 424 | 514,050 | 1,542,150 |
-| `order9-production` | 274,668 | 259,197 | 15,471 | 26,634,630 | 79,903,890 |
+| Profile | Shards | Default concurrency | Graphs | Verified | Skipped | Partitions | Checks |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `order8-smoke` | 64 | 64 | 12,346 | 11,922 | 424 | 514,050 | 1,542,150 |
+| `order9-production` | 2,048 | 2,048 | 274,668 | 259,197 | 15,471 | 26,634,630 | 79,903,890 |
 
 The order-nine verified count is an acceptance gate, not an assumption hidden
 inside the solver: if any eligible graph has a candidate negative, incomplete

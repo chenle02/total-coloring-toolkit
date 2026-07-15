@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import scripts.easley.common as easley_common
 from scripts.easley.bootstrap import _run as bootstrap_run
 from scripts.easley.common import (
     MAX_METADATA_BYTES,
@@ -20,7 +21,9 @@ from scripts.easley.common import (
     launcher_files,
     launcher_sha256,
     load_json,
+    require_easley_shard_count,
     sha256_file,
+    slurm_command,
 )
 from scripts.easley.exact_union import main as exact_union_main
 from scripts.easley.prerequisite import (
@@ -47,6 +50,33 @@ def _freeze_tree(root: Path) -> None:
     for path in sorted(root.rglob("*"), key=lambda item: len(item.parts), reverse=True):
         path.chmod(0o555 if path.is_dir() or path.stat().st_mode & 0o111 else 0o444)
     root.chmod(0o555)
+
+
+@pytest.mark.parametrize("value", [1, 2, 64, 2048])
+def test_easley_shard_count_accepts_scheduler_safe_powers_of_two(value: int) -> None:
+    assert require_easley_shard_count(value) == value
+
+
+@pytest.mark.parametrize("value", [True, 0, -2, 3, 2049, 4096, "64"])
+def test_easley_shard_count_rejects_unsafe_values(value: object) -> None:
+    with pytest.raises(CampaignError, match="shard count"):
+        require_easley_shard_count(value)
+
+
+def test_slurm_command_uses_easley_fallback_after_path_loss(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    scheduler_bin = tmp_path / "slurm" / "bin"
+    scheduler_bin.mkdir(parents=True)
+    sbatch = scheduler_bin / "sbatch"
+    sbatch.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    sbatch.chmod(0o755)
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(easley_common, "_SLURM_FALLBACK_DIRECTORIES", (scheduler_bin,))
+
+    assert slurm_command("sbatch") == str(sbatch)
+    with pytest.raises(CampaignError, match="unsupported Slurm command"):
+        slurm_command("srun")
 
 
 def _build_order8_chain(
@@ -658,6 +688,9 @@ def test_order9_dry_run_requires_matching_order8_exact_union_receipt(
     assert payload["environment"]["TC_RUNTIME_RECEIPT_SHA256"] == sha256_file(
         runtime / "runtime-receipt.json"
     )
+    assert payload["environment"]["TC_SHARDS"] == "2048"
+    assert payload["environment"]["TC_SPLIT_DEPTH"] == "2"
+    assert payload["environment"]["TC_ARRAY_CONCURRENCY"] == "2048"
     assert payload["jobs"][0]["name"] == "order8-prerequisite"
     assert payload["jobs"][1]["name"] == "bootstrap"
     assert payload["jobs"][1]["dependency"] == "afterok:<order8-prerequisite>"
@@ -902,7 +935,7 @@ def test_prerequisite_task_rejects_a_semantic_replay_mismatch(
         "TC_ORDER8_RECEIPT_SHA256": sha256_file(receipt),
         "TC_RUNTIME": str(runtime),
         "TC_SCRATCH": str(tmp_path / "order9"),
-        "TC_SHARDS": "64",
+        "TC_SHARDS": "2048",
         "TC_TOOLKIT_VERSION": "0.2.0",
         "TC_WHEEL_SHA256": wheel_sha256,
     }
@@ -931,7 +964,7 @@ def test_order9_exact_union_fails_before_replay_without_prerequisite_identity(
         "TC_EXPECTED_VERIFIED": "259197",
         "TC_ORDER": "9",
         "TC_SCRATCH": str(tmp_path / "order9"),
-        "TC_SHARDS": "64",
+        "TC_SHARDS": "2048",
     }
     for name, value in environment.items():
         monkeypatch.setenv(name, value)
@@ -1100,7 +1133,7 @@ def test_forged_order8_gate_cannot_bypass_actual_artifact_replay(
         "TC_ORDER8_RECEIPT_SHA256": sha256_file(receipt),
         "TC_RUNTIME": str(runtime),
         "TC_SCRATCH": str(tmp_path / "order9"),
-        "TC_SHARDS": "64",
+        "TC_SHARDS": "2048",
         "TC_TOOLKIT_VERSION": "0.2.0",
         "TC_WHEEL_SHA256": wheel_sha256,
     }
@@ -1131,12 +1164,12 @@ def test_partial_submission_is_journaled_and_cancelled(
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         nonlocal sbatch_calls
         del kwargs
-        if command[0] == "sbatch":
+        if Path(command[0]).name == "sbatch":
             sbatch_calls += 1
             if sbatch_calls == 1:
                 return subprocess.CompletedProcess(command, 0, stdout="12345\n", stderr="")
             return subprocess.CompletedProcess(command, 1, stdout="", stderr="synthetic failure")
-        assert command[0] == "scancel"
+        assert Path(command[0]).name == "scancel"
         cancelled.append(command[1])
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
@@ -1184,6 +1217,87 @@ def test_partial_submission_is_journaled_and_cancelled(
     assert journal["environment"]["TC_CAMPAIGN_CONTRACT_SHA256"] == sha256_file(
         scratch / "sealed" / "campaign-contract.json"
     )
+
+
+def test_order9_submission_uses_full_high_throughput_arrays(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    root = Path(__file__).resolve().parents[2]
+    artifact = tmp_path / "artifact"
+    artifact.write_bytes(b"candidate")
+    digest = sha256_file(artifact)
+    code_commit = "8" * 40
+    receipt, runtime, _ = _build_order8_chain(
+        tmp_path / "prerequisite",
+        root,
+        code_commit=code_commit,
+        wheel_sha256=digest,
+    )
+    submitted: list[list[str]] = []
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        del kwargs
+        assert Path(command[0]).name == "sbatch"
+        submitted.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"{9000 + len(submitted)}\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr("scripts.easley.submit.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "scripts.easley.submit._require_immutable_code_checkout",
+        lambda _root, _commit, _launcher: None,
+    )
+
+    assert (
+        main(
+            [
+                "--profile",
+                "order9-production",
+                "--code-root",
+                str(root),
+                "--code-commit",
+                code_commit,
+                "--scratch",
+                str(tmp_path / "order9"),
+                "--runtime",
+                str(runtime),
+                "--wheel",
+                str(artifact),
+                "--wheel-sha256",
+                digest,
+                "--toolkit-version",
+                "0.2.0",
+                "--nauty-tar",
+                str(artifact),
+                "--order8-receipt",
+                str(receipt),
+                "--submit",
+            ]
+        )
+        == 0
+    )
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["jobs"] == {
+        "bootstrap": "9002",
+        "census_array": "9003",
+        "exact_union": "9006",
+        "order8_prerequisite": "9001",
+        "reduce": "9005",
+        "validation_array": "9004",
+    }
+    assert len(submitted) == 6
+    census, validation = submitted[2], submitted[3]
+    assert "--partition=nova_short" in census
+    assert "--partition=nova_short" in validation
+    assert "--array=0-2047%2048" in census
+    assert "--array=0-2047%2048" in validation
+    assert "--partition=nova_long" in submitted[5]
+    assert "--time=1-00:00:00" in submitted[5]
 
 
 def test_submitter_atomically_rejects_an_existing_scratch_root(
@@ -1247,12 +1361,12 @@ def test_controlled_submission_interruption_cancels_recorded_jobs(
     def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
         nonlocal sbatch_calls
         del kwargs
-        if command[0] == "sbatch":
+        if Path(command[0]).name == "sbatch":
             sbatch_calls += 1
             if sbatch_calls == 1:
                 return subprocess.CompletedProcess(command, 0, stdout="777\n", stderr="")
             raise SubmissionInterrupted("synthetic SIGTERM")
-        assert command[0] == "scancel"
+        assert Path(command[0]).name == "scancel"
         cancelled.append(command[1])
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 

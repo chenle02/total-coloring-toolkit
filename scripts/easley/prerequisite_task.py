@@ -11,6 +11,7 @@ from pathlib import Path
 from scripts.easley.common import (
     CampaignError,
     canonical_json_bytes,
+    easley_shard_count_env,
     positive_env,
     require_env,
     runtime_paths,
@@ -83,8 +84,7 @@ def main() -> int:
         raise CampaignError("prerequisite task must run under Slurm with a numeric job id")
     if positive_env("TC_ORDER") != 9:
         raise CampaignError("the order-eight prerequisite task is only valid for order nine")
-    if positive_env("TC_SHARDS") != 64:
-        raise CampaignError("the order-nine campaign must use exactly 64 shards")
+    easley_shard_count_env()
 
     runtime = Path(require_env("TC_RUNTIME")).resolve(strict=True)
     _, geng, runtime_receipt = runtime_paths()

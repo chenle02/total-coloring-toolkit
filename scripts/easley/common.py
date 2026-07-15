@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 import stat
 import tempfile
 import zipfile
@@ -15,8 +16,11 @@ from pathlib import Path
 from typing import Any
 
 MAX_METADATA_BYTES = 4 * 1024 * 1024
+MAX_EASLEY_SHARDS = 2048
 CAMPAIGN_CONTRACT_SCHEMA = "total-coloring.easley-campaign.v1"
 _INTERNAL_ENV_PREFIX = "TC_INTERNAL_"
+_SLURM_COMMANDS = frozenset({"sbatch", "scancel", "scontrol"})
+_SLURM_FALLBACK_DIRECTORIES = (Path("/cm/shared/apps/slurm/current/bin"),)
 
 
 class CampaignError(RuntimeError):
@@ -66,6 +70,50 @@ def positive_env(name: str) -> int:
     if value <= 0 or str(value) != raw:
         raise CampaignError(f"{name} must be a canonical positive integer")
     return value
+
+
+def require_easley_shard_count(value: object, *, name: str = "shard count") -> int:
+    """Return a scheduler-safe power-of-two shard count.
+
+    Easley's current atomic dependency graph submits two arrays plus four
+    singleton jobs.  A 2,048-shard campaign therefore remains below the
+    cluster's 5,001-job submission cap and is the largest power of two below
+    its 2,500-running-job user cap.  The bound also keeps the exact-union
+    receipt comfortably below the shared metadata reader's four-MiB limit.
+    """
+
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise CampaignError(f"{name} must be a positive integer")
+    if value > MAX_EASLEY_SHARDS:
+        raise CampaignError(f"{name} must not exceed {MAX_EASLEY_SHARDS}")
+    if value & (value - 1):
+        raise CampaignError(f"{name} must be a power of two")
+    return value
+
+
+def easley_shard_count_env() -> int:
+    """Read and validate the shard count sealed into a compute-job contract."""
+
+    return require_easley_shard_count(positive_env("TC_SHARDS"), name="TC_SHARDS")
+
+
+def slurm_command(name: str) -> str:
+    """Locate an allowed Slurm command even after ``module purge`` changes PATH.
+
+    The unresolved command name is returned as a last resort so the calling
+    subprocess retains the operating system's normal, journaled failure mode.
+    """
+
+    if name not in _SLURM_COMMANDS:
+        raise CampaignError(f"unsupported Slurm command: {name}")
+    discovered = shutil.which(name)
+    if discovered is not None:
+        return discovered
+    for directory in _SLURM_FALLBACK_DIRECTORIES:
+        candidate = directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return name
 
 
 def nonnegative_env(name: str) -> int:

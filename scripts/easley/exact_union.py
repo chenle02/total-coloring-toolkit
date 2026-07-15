@@ -10,6 +10,7 @@ from pathlib import Path
 from scripts.easley.common import (
     CampaignError,
     atomic_json,
+    easley_shard_count_env,
     load_json_with_snapshot,
     positive_env,
     require_env,
@@ -90,7 +91,7 @@ def main() -> int:
     if "SLURM_JOB_ID" not in os.environ:
         raise CampaignError("exact-union validator must run under Slurm")
     _, geng, runtime_receipt = runtime_paths()
-    shard_count = positive_env("TC_SHARDS")
+    shard_count = easley_shard_count_env()
     order = positive_env("TC_ORDER")
     expected_records = positive_env("TC_EXPECTED_RECORDS")
     expected_partitions = positive_env("TC_EXPECTED_PARTITIONS")

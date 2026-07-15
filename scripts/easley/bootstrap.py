@@ -19,6 +19,7 @@ from scripts.easley.common import (
     CampaignError,
     atomic_json,
     canonical_json_bytes,
+    easley_shard_count_env,
     launcher_sha256,
     load_json,
     positive_env,
@@ -135,6 +136,7 @@ def main() -> int:
         raise CampaignError("bootstrap refuses to compile on a login node")
     require_campaign_contract()
     order = positive_env("TC_ORDER")
+    easley_shard_count_env()
     if order not in {8, 9}:
         raise CampaignError("Easley bootstrap only supports orders eight and nine")
     campaign_mode = require_env("TC_CAMPAIGN_MODE")
