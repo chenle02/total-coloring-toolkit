@@ -82,6 +82,9 @@ with strict warnings and independently regenerate the mathematics in Python.
 Changing a count is therefore not an ordinary snapshot update: it requires an
 explained semantic change, agreement of both implementations, the appropriate
 semantics/schema version decision, and review of the associated proof claim.
+The package gate also compiles and replays the native source from the unpacked
+sdist itself, then compares the output byte-for-byte with the fixture packaged
+beside it.
 
 `complete: true` means all role-labelled states in the listed finite profiles
 were visited. It says nothing about physical graph realization,

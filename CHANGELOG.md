@@ -10,7 +10,8 @@ All notable changes are documented here. The project follows
 - Add a documented, dependency-free C++20 auditor for seven exact `D = 8`
   dependency/root-pivot profiles, with deterministic versioned JSON receipts,
   a public schema and golden fixture, an independent Python reference model,
-  strict native compilation, and differential regression tests.
+  strict native compilation, differential regression tests, and an
+  unpacked-sdist compile/replay gate for the standalone source.
 
 ## [0.3.0] - 2026-07-14
 

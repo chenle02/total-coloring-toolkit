@@ -249,7 +249,10 @@ Tests compile the production source with strict warnings, validate its JSON
 against the public schema, compare all seven profile counts with the checked-in
 golden receipt, and differentially reproduce representative small and large
 profiles with Python. CLI failure cases and profile-selection ordering are
-also tested.
+also tested. The release package gate separately unpacks the built sdist,
+compiles the auditor using only source and fixture paths inside that unpacked
+tree, and requires its complete-suite bytes to equal the packaged golden
+receipt. Thus checkout compilation cannot conceal a missing sdist dependency.
 
 The two `w=7` Python enumerations are opt-in because they are intentionally
 much slower than the C++ suite:

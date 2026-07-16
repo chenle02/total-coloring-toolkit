@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -277,6 +278,43 @@ def _venv_python(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def _audit_native_source_from_sdist(sdist_root: Path, work_dir: Path) -> None:
+    """Compile and replay the native auditor using only unpacked-sdist paths."""
+
+    compiler = shutil.which("c++")
+    if compiler is None:
+        raise PackageGateError("c++ is required to verify the sdist-only native auditor")
+
+    source = sdist_root / "auditors" / "d8_dependency_audit.cpp"
+    expected_receipt = (
+        sdist_root / "tests" / "fixtures" / "d8-dependency-counts-v1.json"
+    ).read_bytes()
+    binary = work_dir / "d8_dependency_audit"
+    _run(
+        [
+            compiler,
+            "-std=c++20",
+            "-O2",
+            "-Wall",
+            "-Wextra",
+            "-Wpedantic",
+            "-Wconversion",
+            "-Wsign-conversion",
+            "-Wshadow",
+            "-Werror",
+            str(source),
+            "-o",
+            str(binary),
+        ],
+        cwd=work_dir,
+    )
+    completed = _run([str(binary), "--suite"], cwd=work_dir)
+    if completed.stderr:
+        raise PackageGateError("sdist-only native auditor wrote to stderr")
+    if completed.stdout.encode("utf-8") != expected_receipt:
+        raise PackageGateError("sdist-only native auditor receipt differs from golden bytes")
+
+
 def run_package_gate(project_root: Path, work_dir: Path) -> dict[str, Any]:
     project_root = project_root.resolve()
     normalized_name, version = _project_identity(project_root)
@@ -301,6 +339,7 @@ def run_package_gate(project_root: Path, work_dir: Path) -> dict[str, Any]:
     unpacked = work_dir / "unpacked"
     _extract_sdist(sdist_files, unpacked)
     sdist_root = unpacked / prefix
+    _audit_native_source_from_sdist(sdist_root, work_dir)
     _run([sys.executable, "-m", "build", "--wheel", "--outdir", str(dist), str(sdist_root)])
     wheel_path = _one_artifact(dist, "*.whl", "wheel")
     wheel_files = _read_wheel(wheel_path)
