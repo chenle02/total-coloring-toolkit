@@ -29,6 +29,7 @@ PUBLIC_SCHEMA_NAMES = (
     "census-completion-v1.schema.json",
     "census-manifest-v1.schema.json",
     "census-record-v1.schema.json",
+    "d8-dependency-pivot-audit-v1.schema.json",
     "dataset-manifest-v2.schema.json",
     "graph-v1.schema.json",
     "total-coloring-certificate-v1.schema.json",
@@ -52,11 +53,12 @@ ROOT_SDIST_FILES = frozenset(
     }
 )
 TREE_SUFFIXES = {
+    "auditors": frozenset({".cpp"}),
     "docs": frozenset({".md"}),
     "schemas": frozenset({".json"}),
     "scripts": frozenset({".py"}),
     "src/total_coloring": frozenset({".py", ".typed"}),
-    "tests": frozenset({".py"}),
+    "tests": frozenset({".json", ".py"}),
 }
 FORBIDDEN_PARTS = frozenset(
     {
@@ -199,10 +201,13 @@ def _source_files(project_root: Path) -> dict[str, Path]:
         )
     required = {
         "LICENSE",
+        "auditors/d8_dependency_audit.cpp",
+        "docs/d8-dependency-audit.md",
         "pyproject.toml",
         "scripts/package_gate.py",
         "src/total_coloring/py.typed",
         "src/total_coloring/schema_resources.py",
+        "tests/fixtures/d8-dependency-counts-v1.json",
     }
     missing = sorted(required - files.keys())
     if missing:

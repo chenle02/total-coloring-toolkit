@@ -59,6 +59,7 @@ Repository = "https://github.com/chenle02/total-coloring-toolkit"
 
 [tool.hatch.build.targets.sdist]
 include = [
+  "/auditors",
   "/src",
   "/schemas",
   "/scripts",
