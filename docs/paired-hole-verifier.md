@@ -52,10 +52,13 @@ receipt = verify_paired_hole_state(state)
   hole, and a valid fill certificate.
 - `verified_two_swap_orbit_exit`: no direct cross exit was found, but the
   bounded role-color orbit contains two legal full-component swaps followed by
-  a certificate-verified fill. The first component is recomputed from the raw
-  state over every graph component (including components disjoint from the six
-  named fan vertices), and the second is recomputed from the verified
-  intermediate coloring.
+  a certificate-verified fill. The first move may be an `alpha`--role swap or
+  an `A x B` cross swap and is recomputed from the raw state over every graph
+  component (including components disjoint from the six named fan vertices).
+  The second `A x B` component is recomputed from the verified intermediate
+  coloring. This documented two-move verifier orbit requires the two move
+  pairs to share exactly one role color; it does not advertise negative
+  exhaustion beyond that scope.
 - `verified_cross_terminal_release_exit`: a failed direct cross swap has a
   replayable terminal-edge release with a preceding opposite-color edge; the
   prefix swap creates a common endpoint hole and the fill certificate passes.
@@ -81,12 +84,13 @@ after preserving these semantic fields; reducing them to an unverified Boolean
 would discard the structural evidence needed for the next proof lemma.
 
 When several bounded two-swap exits exist, the retained certificate is chosen
-deterministically by role color, first-component canonical edge-index tuple,
-`A` color, `B` color, and rooted second-component edge-index tuple, in that
-lexicographic order. The orbit topology records linkedness before and after the
-first move, the pre-move cross component, the first component's role-color
-edges, and their exact intersection. A path walk starts at its smaller endpoint;
-a cycle starts at its smallest vertex and uses the lexicographically smaller
+deterministically: `alpha`--role first-move pairs precede cross pairs, followed
+by the first component's canonical edge-index tuple, the second cross-color
+pair, and the rooted second-component edge-index tuple. The orbit topology
+records linkedness before and after the first move, the pre-move cross
+component, the first component's edges in the uniquely shared role color, and
+their exact intersection. A path walk starts at its smaller endpoint; a cycle
+starts at its smallest vertex and uses the lexicographically smaller
 orientation.
 
 ## Dependency-free JSONL readback

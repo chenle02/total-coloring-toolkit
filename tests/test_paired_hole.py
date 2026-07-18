@@ -95,6 +95,23 @@ def hard_residual_state() -> PairedHoleState:
     return state_from_coloring(vertex_colors, cast(dict[tuple[int, int], int], edge_colors))
 
 
+def cross_cross_residual_state() -> PairedHoleState:
+    vertex_colors = (1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
+    color_classes = {
+        0: ((0, 8), (1, 10), (2, 11), (3, 6), (4, 9), (5, 7)),
+        1: ((1, 8), (4, 5), (10, 11)),
+        2: ((0, 9), (2, 3), (8, 10)),
+        3: ((1, 4), (3, 7), (6, 11)),
+        4: ((1, 5), (2, 6), (8, 11)),
+        5: ((0, 2), (5, 6), (7, 9)),
+        6: ((0, 3), (4, 7), (9, 10)),
+    }
+    edge_colors = {
+        tuple(sorted(edge)): color for color, edges in color_classes.items() for edge in edges
+    }
+    return state_from_coloring(vertex_colors, cast(dict[tuple[int, int], int], edge_colors))
+
+
 def nonaligned_terminal_release_state() -> PairedHoleState:
     vertex_colors = (1, 2, 2, 3, 1, 5, 3, 4, 4, 5, 6, 6)
     color_classes = {
@@ -254,6 +271,26 @@ def test_hard_residual_has_independently_verified_two_swap_orbit_exit() -> None:
     assert orbit.topology.cross_component_before.walk == (0, 3, 6, 4, 1)
     assert orbit.topology.first_role_color_edges == ((1, 4), (3, 6), (10, 11))
     assert orbit.topology.intersection_edges == ((1, 4), (3, 6))
+    assert orbit.fill_color == 6
+    assert orbit.completion_certificate.verify(state.graph).valid
+
+
+def test_cross_cross_detachment_has_independently_verified_exit() -> None:
+    state = cross_cross_residual_state()
+    result = verify_paired_hole_state(state)
+    assert result.status is PairedHoleStatus.VERIFIED_TWO_SWAP_ORBIT_EXIT
+    assert result.issues == ()
+    assert result.verified_exits == ()
+    assert result.cross_terminal_release_exits == ()
+    orbit = result.two_swap_orbit_exit
+    assert orbit is not None
+    assert tuple(move.colors for move in orbit.moves) == ((3, 5), (3, 6))
+    assert orbit.moves[0].component.edges == ((3, 7), (7, 9))
+    assert orbit.moves[1].component.edges == ((0, 3),)
+    assert orbit.topology.first_role_color == 3
+    assert orbit.topology.relation_before_first_move is CrossComponentRelation.LINKED
+    assert orbit.topology.relation_after_first_move is CrossComponentRelation.DISTINCT
+    assert orbit.topology.intersection_edges == ((3, 7),)
     assert orbit.fill_color == 6
     assert orbit.completion_certificate.verify(state.graph).valid
 

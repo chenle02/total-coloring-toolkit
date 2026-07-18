@@ -1616,10 +1616,13 @@ def _derive_two_swap_orbit_exit(
 ) -> TwoSwapOrbitExit | None:
     """Search the exact bounded two-move orbit relevant to the residue.
 
-    The first move ranges over every full alpha-role-color component in the
-    graph; restricting it to the six fan-role vertices would miss an outside
-    component that intersects and detaches a linked cross path.  The second is
-    a full A x B component meeting x or y.
+    The first move ranges over every full alpha-role-color or A x B component
+    in the graph; restricting it to alpha components would miss a cross-cross
+    detachment, while restricting it to the six fan-role vertices would miss
+    an outside component that intersects and detaches a linked cross path.
+    The second is a full A x B component meeting x or y.  The retained
+    bounded orbit requires the two moves to share exactly one role color;
+    other two-move patterns remain outside this verifier's documented scope.
     Every intermediate partial coloring and final certificate is checked from
     scratch.  Exhaustion of this deliberately bounded orbit is not a negative
     proof and leads only to ``fully_blocked_candidate``.
@@ -1638,98 +1641,102 @@ def _derive_two_swap_orbit_exit(
             }
         )
     )
-    for beta in role_colors:
+    cross_pairs = tuple((a, b) for a in a_set for b in b_set)
+    first_pairs = tuple((state.alpha, beta) for beta in role_colors) + cross_pairs
+    for first, second in first_pairs:
         for first_component in _unique_components_meeting(
             state,
-            first=state.alpha,
-            second=beta,
+            first=first,
+            second=second,
             vertices=range(state.graph.order),
         ):
             first_colors, first_issues = _swapped_assignment(
                 state,
                 first_component,
-                first=state.alpha,
-                second=beta,
+                first=first,
+                second=second,
             )
             if first_issues:
                 continue
             intermediate = _state_with_edge_colors(state, first_colors)
-            for a in a_set:
-                for b in b_set:
-                    second_components = _unique_components_meeting(
+            for a, b in cross_pairs:
+                shared_colors = tuple(sorted({first, second} & {a, b}))
+                if len(shared_colors) != 1:
+                    continue
+                shared_color = shared_colors[0]
+                second_components = _unique_components_meeting(
+                    intermediate,
+                    first=a,
+                    second=b,
+                    vertices=(x, y),
+                )
+                for second_component in second_components:
+                    second_colors, second_issues = _swapped_assignment(
                         intermediate,
+                        second_component,
                         first=a,
                         second=b,
-                        vertices=(x, y),
                     )
-                    for second_component in second_components:
-                        second_colors, second_issues = _swapped_assignment(
-                            intermediate,
-                            second_component,
-                            first=a,
-                            second=b,
-                        )
-                        if second_issues:
-                            continue
-                        final_partial = _state_with_edge_colors(state, second_colors)
-                        completion = _completion_from_common_hole(final_partial)
-                        if completion is None:
-                            continue
-                        fill_color, certificate = completion
-                        x_before = _component(state, first=a, second=b, start=x)
-                        y_before = _component(state, first=a, second=b, start=y)
-                        x_after = _component(intermediate, first=a, second=b, start=x)
-                        y_after = _component(intermediate, first=a, second=b, start=y)
-                        cross_root = x if x in second_component.vertices else y
-                        cross_before = x_before if cross_root == x else y_before
-                        first_role_color_indices = frozenset(
-                            edge_index
-                            for edge_index in first_component.edge_indices
-                            if state.edge_colors[edge_index] == beta
-                        )
-                        intersection_indices = first_role_color_indices & frozenset(
-                            cross_before.edge_indices
-                        )
-                        return TwoSwapOrbitExit(
-                            moves=(
-                                KempeMove(
-                                    colors=(state.alpha, beta),
-                                    component=_public_component(
-                                        state,
-                                        first_component,
-                                        colors=(state.alpha, beta),
-                                    ),
+                    if second_issues:
+                        continue
+                    final_partial = _state_with_edge_colors(state, second_colors)
+                    completion = _completion_from_common_hole(final_partial)
+                    if completion is None:
+                        continue
+                    fill_color, certificate = completion
+                    x_before = _component(state, first=a, second=b, start=x)
+                    y_before = _component(state, first=a, second=b, start=y)
+                    x_after = _component(intermediate, first=a, second=b, start=x)
+                    y_after = _component(intermediate, first=a, second=b, start=y)
+                    cross_root = x if x in second_component.vertices else y
+                    cross_before = x_before if cross_root == x else y_before
+                    first_role_color_indices = frozenset(
+                        edge_index
+                        for edge_index in first_component.edge_indices
+                        if state.edge_colors[edge_index] == shared_color
+                    )
+                    intersection_indices = first_role_color_indices & frozenset(
+                        cross_before.edge_indices
+                    )
+                    return TwoSwapOrbitExit(
+                        moves=(
+                            KempeMove(
+                                colors=(first, second),
+                                component=_public_component(
+                                    state,
+                                    first_component,
+                                    colors=(first, second),
                                 ),
-                                KempeMove(
+                            ),
+                            KempeMove(
+                                colors=(a, b),
+                                component=_public_component(
+                                    intermediate,
+                                    second_component,
                                     colors=(a, b),
-                                    component=_public_component(
-                                        intermediate,
-                                        second_component,
-                                        colors=(a, b),
-                                    ),
                                 ),
                             ),
-                            topology=OrbitTopologySignature(
-                                first_role_color=beta,
-                                cross_colors=(a, b),
-                                cross_root=cross_root,
-                                relation_before_first_move=_component_relation(x_before, y_before),
-                                relation_after_first_move=_component_relation(x_after, y_after),
-                                cross_component_before=_public_component(
-                                    state, cross_before, colors=(a, b)
-                                ),
-                                first_role_color_edges=tuple(
-                                    state.graph.edges[index]
-                                    for index in sorted(first_role_color_indices)
-                                ),
-                                intersection_edges=tuple(
-                                    state.graph.edges[index]
-                                    for index in sorted(intersection_indices)
-                                ),
+                        ),
+                        topology=OrbitTopologySignature(
+                            first_role_color=shared_color,
+                            cross_colors=(a, b),
+                            cross_root=cross_root,
+                            relation_before_first_move=_component_relation(x_before, y_before),
+                            relation_after_first_move=_component_relation(x_after, y_after),
+                            cross_component_before=_public_component(
+                                state, cross_before, colors=(a, b)
                             ),
-                            fill_color=fill_color,
-                            completion_certificate=certificate,
-                        )
+                            first_role_color_edges=tuple(
+                                state.graph.edges[index]
+                                for index in sorted(first_role_color_indices)
+                            ),
+                            intersection_edges=tuple(
+                                state.graph.edges[index] for index in sorted(intersection_indices)
+                            ),
+                        ),
+                        fill_color=fill_color,
+                        completion_certificate=certificate,
+                    )
     return None
 
 
