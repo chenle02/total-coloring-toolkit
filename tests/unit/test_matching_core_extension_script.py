@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+from itertools import pairwise
 from pathlib import Path
 from types import ModuleType
 
@@ -173,6 +174,93 @@ def test_order_six_cyclic_fan_state_is_extendable() -> None:
     }
     assignment = vertex_colours + tuple(completed_edge_colours[edge] for edge in graph.edges)
     assert module.independent_witness_issues(graph, 6, vertex_colours, assignment) == ()
+
+
+def test_fully_blocked_two_sided_order_twelve_state_unlocks() -> None:
+    module = load_script()
+    # Labels: x,y,u,v,w,z,P,Q,A,B,C,D.
+    vertex_colours = (1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
+    initial_edge_colours = {
+        (0, 7): 0,
+        (1, 6): 0,
+        (2, 9): 0,
+        (3, 8): 0,
+        (4, 11): 0,
+        (5, 10): 0,
+        (1, 8): 1,
+        (4, 5): 1,
+        (7, 9): 1,
+        (0, 10): 2,
+        (2, 3): 2,
+        (6, 11): 2,
+        (1, 4): 3,
+        (3, 7): 3,
+        (9, 10): 3,
+        (1, 5): 4,
+        (2, 11): 4,
+        (7, 8): 4,
+        (0, 2): 5,
+        (5, 6): 5,
+        (8, 11): 5,
+        (0, 3): 6,
+        (4, 9): 6,
+        (6, 10): 6,
+    }
+    graph = SimpleGraph.from_edges(12, (*initial_edge_colours, (0, 1)))
+    assert graph.degrees == (5, 5, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4)
+    assert 0 not in vertex_colours
+
+    def missing(vertex: int) -> set[int]:
+        used = {vertex_colours[vertex]}
+        used.update(colour for edge, colour in initial_edge_colours.items() if vertex in edge)
+        return set(range(7)) - used
+
+    assert missing(0) == {3, 4}
+    assert missing(1) == {5, 6}
+    assert missing(2) == {1, 6}
+    assert missing(3) == {1, 5}
+    assert missing(4) == {2, 4}
+    assert missing(5) == {2, 3}
+
+    blocked_paths = (
+        (1, (2, 9, 7, 0)),
+        (1, (3, 8, 1, 6)),
+        (2, (4, 11, 6, 1)),
+        (2, (5, 10, 0, 7)),
+        (3, (0, 7, 3, 8)),
+        (3, (5, 10, 9, 2)),
+        (4, (0, 7, 8, 3)),
+        (4, (4, 11, 2, 9)),
+        (5, (1, 6, 5, 10)),
+        (5, (3, 8, 11, 4)),
+        (6, (1, 6, 10, 5)),
+        (6, (2, 9, 4, 11)),
+    )
+    for beta, path in blocked_paths:
+        colors = tuple(
+            initial_edge_colours[(min(left, right), max(left, right))]
+            for left, right in pairwise(path)
+        )
+        assert colors == (0, beta, 0)
+        assert beta in missing(path[0])
+        assert vertex_colours[path[-1]] == beta
+
+    completed_edge_colours = dict(initial_edge_colours)
+
+    def swap_path(path: tuple[int, ...], beta: int) -> None:
+        for left, right in pairwise(path):
+            edge = (min(left, right), max(left, right))
+            colour = completed_edge_colours[edge]
+            assert colour in {0, beta}
+            completed_edge_colours[edge] = beta if colour == 0 else 0
+
+    swap_path((11, 4, 5, 10), 1)
+    swap_path((9, 2, 3, 8), 2)
+    swap_path((0, 7, 8), 4)
+    swap_path((1, 6, 10), 6)
+    completed_edge_colours[(0, 1)] = 0
+    assignment = vertex_colours + tuple(completed_edge_colours[edge] for edge in graph.edges)
+    assert module.independent_witness_issues(graph, 7, vertex_colours, assignment) == ()
 
 
 def test_fixed_problem_requires_the_prescribed_vertex_colours() -> None:
