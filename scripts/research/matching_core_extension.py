@@ -147,7 +147,7 @@ def in_scope(graph: SimpleGraph, core_kind: str) -> bool:
             degree[left] += 1
             degree[right] += 1
         return max(degree, default=0) <= 1
-    if core_kind == "tight-matching-residue":
+    if core_kind == "two-sided-matching-envelope":
         degree = [0] * graph.order
         for left, right in edges:
             degree[left] += 1
@@ -193,7 +193,7 @@ def parse_arguments() -> argparse.Namespace:
         "--core-kind",
         choices=(
             "matching-nonempty",
-            "tight-matching-residue",
+            "two-sided-matching-envelope",
             "forest-nonempty",
             "any-nonempty",
         ),

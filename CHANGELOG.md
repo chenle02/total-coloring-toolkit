@@ -5,6 +5,13 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- Add a sharded matching-core fixed-precoloring falsification harness with
+  canonical size-at-most-two color-class representatives, a two-sided
+  saturated-core envelope, independent total-coloring certificate verification,
+  explicit bounded-run receipts, and order-six/order-ten regression witnesses.
+
 ## [0.3.0] - 2026-07-14
 
 ### Changed

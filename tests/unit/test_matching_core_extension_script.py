@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import argparse
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
+from total_coloring.geng import GengIdentity
 from total_coloring.graph import SimpleGraph
+from total_coloring.solver import SearchStats, SolveResult, SolveStatus
 
 
 def load_script() -> ModuleType:
@@ -28,6 +34,8 @@ def test_bounded_pair_partitions_are_canonical_and_bounded() -> None:
         for index in range(1, len(partition)):
             assert partition[index] <= max(partition[:index]) + 1
 
+    assert len(list(module.bounded_pair_partitions(10, 5))) == 945
+
 
 def test_matching_core_scope_excludes_independent_and_nonmatching_cores() -> None:
     module = load_script()
@@ -42,8 +50,48 @@ def test_matching_core_scope_excludes_independent_and_nonmatching_cores() -> Non
     assert not module.in_scope(cycle, "forest-nonempty")
 
 
-def test_tight_matching_residue_recognizes_first_order_ten_template() -> None:
+def test_two_sided_matching_envelope_starts_before_saturated_order_ten_template() -> None:
     module = load_script()
+    minimum_envelope = SimpleGraph.from_edges(
+        5,
+        (
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (1, 2),
+            (1, 3),
+            (1, 4),
+            (2, 3),
+        ),
+    )
+    assert minimum_envelope.degrees == (4, 4, 3, 3, 2)
+    assert module.in_scope(minimum_envelope, "two-sided-matching-envelope")
+
+    one_sided = SimpleGraph.from_edges(
+        7,
+        (
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (1, 2),
+            (1, 5),
+            (1, 6),
+            (2, 3),
+            (3, 4),
+            (4, 5),
+        ),
+    )
+    assert one_sided.degrees == (4, 4, 3, 3, 3, 2, 1)
+    assert not module.in_scope(one_sided, "two-sided-matching-envelope")
+
+    nonmatching_core = SimpleGraph.from_edges(
+        4,
+        ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)),
+    )
+    assert not module.in_scope(nonmatching_core, "two-sided-matching-envelope")
+
     graph = SimpleGraph.from_edges(
         10,
         (
@@ -65,7 +113,7 @@ def test_tight_matching_residue_recognizes_first_order_ten_template() -> None:
 
     assert graph.degrees == (4, 4, 3, 3, 1, 3, 3, 2, 2, 1)
     assert module.in_scope(graph, "matching-nonempty")
-    assert module.in_scope(graph, "tight-matching-residue")
+    assert module.in_scope(graph, "two-sided-matching-envelope")
 
     vertex_colours = (3, 5, 4, 4, 5, 3, 1, 1, 2, 2)
     assert module.is_proper_vertex_coloring(graph, vertex_colours)
@@ -73,7 +121,56 @@ def test_tight_matching_residue_recognizes_first_order_ten_template() -> None:
     result = module.solve_dsatur(problem, limits=module.SearchLimits())
     assert result.status is module.SolveStatus.WITNESS
     assert result.assignment is not None
-    assert problem.verify_assignment(result.assignment) == ()
+    assert module.independent_witness_issues(graph, 6, vertex_colours, result.assignment) == ()
+
+
+def test_order_six_cyclic_fan_state_is_extendable() -> None:
+    module = load_script()
+    graph = SimpleGraph.from_edges(
+        6,
+        (
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 5),
+            (1, 3),
+            (1, 4),
+            (1, 5),
+            (2, 4),
+            (2, 5),
+            (3, 5),
+        ),
+    )
+    assert graph.to_graph6() == "EUzo"
+    vertex_colours = (3, 1, 2, 4, 4, 5)
+    partial_edge_colours = {
+        (0, 2): 0,
+        (0, 3): 1,
+        (0, 4): 2,
+        (1, 3): 5,
+        (1, 4): 0,
+        (1, 5): 3,
+        (2, 4): 5,
+        (2, 5): 4,
+        (3, 5): 0,
+    }
+
+    def missing(vertex: int) -> set[int]:
+        used = {vertex_colours[vertex]}
+        used.update(colour for edge, colour in partial_edge_colours.items() if vertex in edge)
+        return set(range(6)) - used
+
+    assert missing(5) == {1, 2}
+    assert missing(3) == {2, 3}
+    assert missing(4) == {1, 3}
+
+    completed_edge_colours = {
+        **partial_edge_colours,
+        (0, 5): 4,
+        (2, 5): 1,
+    }
+    assignment = vertex_colours + tuple(completed_edge_colours[edge] for edge in graph.edges)
+    assert module.independent_witness_issues(graph, 6, vertex_colours, assignment) == ()
 
 
 def test_fixed_problem_requires_the_prescribed_vertex_colours() -> None:
@@ -104,3 +201,84 @@ def test_non_witness_statuses_map_to_receipt_counters() -> None:
     assert module.non_witness_count_key(module.SolveStatus.CANDIDATE_UNSAT) == "candidate_unsat"
     assert module.non_witness_count_key(module.SolveStatus.UNKNOWN) == "unknown"
     assert module.non_witness_count_key(module.SolveStatus.ERROR) == "errors"
+
+
+def _script_arguments(output: Path, *, max_graphs: int | None) -> argparse.Namespace:
+    return argparse.Namespace(
+        connected=False,
+        core_kind="matching-nonempty",
+        geng="geng",
+        max_degree=None,
+        max_graphs=max_graphs,
+        max_nodes_per_search=None,
+        min_degree=None,
+        order=4,
+        output=output,
+        required_maximum_degree=None,
+        shard_count=1,
+        shard_index=0,
+        split_depth=0,
+        timeout_per_search=None,
+    )
+
+
+def test_capped_main_marks_receipt_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = load_script()
+    graph = SimpleGraph.from_edges(4, ((0, 1), (1, 2), (2, 3)))
+    output = tmp_path / "bounded.json"
+    monkeypatch.setattr(module, "parse_arguments", lambda: _script_arguments(output, max_graphs=1))
+    monkeypatch.setattr(
+        module,
+        "geng_identity",
+        lambda _spec, executable: GengIdentity(executable, "0" * 64, ("4",)),
+    )
+    monkeypatch.setattr(module, "stream_geng", lambda _spec, executable: iter((graph, graph)))
+
+    assert module.main() == 0
+    receipt = json.loads(output.read_text(encoding="utf-8"))
+    assert json.loads(capsys.readouterr().out) == receipt
+    assert receipt["status"] == "bounded_positive"
+    assert receipt["input_exhausted"] is False
+    assert receipt["stop_reason"] == "max_graphs"
+
+
+def test_solver_error_writes_fail_closed_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = load_script()
+    graph = SimpleGraph.from_edges(4, ((0, 1), (1, 2), (2, 3)))
+    output = tmp_path / "error.json"
+    monkeypatch.setattr(
+        module, "parse_arguments", lambda: _script_arguments(output, max_graphs=None)
+    )
+    monkeypatch.setattr(
+        module,
+        "geng_identity",
+        lambda _spec, executable: GengIdentity(executable, "0" * 64, ("4",)),
+    )
+    monkeypatch.setattr(module, "stream_geng", lambda _spec, executable: iter((graph,)))
+    monkeypatch.setattr(
+        module,
+        "solve_dsatur",
+        lambda _problem, limits: SolveResult(
+            status=SolveStatus.ERROR,
+            problem_digest="0" * 64,
+            assignment=None,
+            stats=SearchStats(nodes=1, backtracks=0, elapsed_seconds=0.0),
+            detail="synthetic solver error",
+        ),
+    )
+
+    assert module.main() == 2
+    receipt = json.loads(output.read_text(encoding="utf-8"))
+    assert json.loads(capsys.readouterr().out) == receipt
+    assert receipt["status"] == "error"
+    assert receipt["input_exhausted"] is False
+    assert receipt["stop_reason"] == "first_non_witness"
+    assert receipt["counts"]["errors"] == 1
