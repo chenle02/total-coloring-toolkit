@@ -412,3 +412,30 @@ def test_post_terminal_lock_saturated_fixture_has_two_swap_orbit_exit() -> None:
     assert detachment["pre_first_move_relation"] == "coincident_xy"
     assert detachment["post_first_move_relation"] == "distinct"
     assert detachment["shared_role_edges"]
+
+
+def test_cross_cross_release_is_not_misclassified_as_alpha_first() -> None:
+    module = load_script()
+    vertex_colours = module.FROZEN_VERTEX_COLOURS
+    state = _state_from_colour_classes(
+        {
+            0: {(0, 8), (1, 10), (2, 11), (3, 6), (4, 9), (5, 7)},
+            1: {(1, 8), (4, 5), (10, 11)},
+            2: {(0, 9), (2, 3), (8, 10)},
+            3: {(1, 4), (3, 7), (6, 11)},
+            4: {(1, 5), (2, 6), (8, 11)},
+            5: {(0, 2), (5, 6), (7, 9)},
+            6: {(0, 3), (4, 7), (9, 10)},
+        }
+    )
+
+    assert module.terminal_releases(vertex_colours, state) == ()
+    assert module.cross_terminal_releases(vertex_colours, state) == ()
+    assert module.direct_cross_exits(vertex_colours, state) == ()
+    proposal = module.propose_release(vertex_colours, state, max_depth=2, max_states=1_000)
+    assert proposal.status == "proposed_release"
+    assert tuple(move.colours for move in proposal.moves) == ((3, 5), (3, 6))
+    assert proposal.moves[0].component_walk == (3, 7, 9)
+    assert proposal.moves[1].component_walk == (0, 3)
+    assert module.orbit_pattern(proposal) == "cross_role_then_cross_two_swap_release"
+    assert module.detachment_analysis(state, proposal, module.cross_topologies(state)) is None

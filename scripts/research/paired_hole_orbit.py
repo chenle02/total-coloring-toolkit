@@ -1138,6 +1138,7 @@ class RunCounts:
     hard_other_fan_alignment: int = 0
     hard_alpha_hole_role_then_cross_two_swap_release: int = 0
     hard_alpha_vertex_role_then_cross_two_swap_release: int = 0
+    hard_cross_role_then_cross_two_swap_release: int = 0
     hard_other_or_unresolved_bounded_orbit: int = 0
     proposed_releases: int = 0
     orbit_depth_bounds: int = 0
@@ -1173,13 +1174,18 @@ def orbit_pattern(proposal: OrbitProposal) -> str:
     if len(proposal.moves) != 2:
         return f"proposed_release_in_{len(proposal.moves)}_moves"
     first, second = proposal.moves
-    first_nonalpha = next((colour for colour in first.colours if colour != ALPHA), None)
+    first_set = set(first.colours)
     second_set = set(second.colours)
     second_is_cross = bool(second_set & {3, 4}) and bool(second_set & {5, 6})
-    if first_nonalpha in {3, 4, 5, 6} and second_is_cross:
-        return "alpha_hole_role_then_cross_two_swap_release"
-    if first_nonalpha in {1, 2} and second_is_cross:
-        return "alpha_vertex_role_then_cross_two_swap_release"
+    if ALPHA in first_set and second_is_cross:
+        first_nonalpha = next(colour for colour in first.colours if colour != ALPHA)
+        if first_nonalpha in {3, 4, 5, 6}:
+            return "alpha_hole_role_then_cross_two_swap_release"
+        if first_nonalpha in {1, 2}:
+            return "alpha_vertex_role_then_cross_two_swap_release"
+    first_is_cross = bool(first_set & {3, 4}) and bool(first_set & {5, 6})
+    if first_is_cross and second_is_cross:
+        return "cross_role_then_cross_two_swap_release"
     return "other_two_swap_release"
 
 
@@ -1592,6 +1598,8 @@ def run_search(
                                 counts.hard_alpha_hole_role_then_cross_two_swap_release += 1
                             elif pattern == "alpha_vertex_role_then_cross_two_swap_release":
                                 counts.hard_alpha_vertex_role_then_cross_two_swap_release += 1
+                            elif pattern == "cross_role_then_cross_two_swap_release":
+                                counts.hard_cross_role_then_cross_two_swap_release += 1
                             else:
                                 counts.hard_other_or_unresolved_bounded_orbit += 1
                             topology_by_colours = {
