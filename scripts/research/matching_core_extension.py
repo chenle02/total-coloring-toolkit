@@ -283,7 +283,18 @@ def main() -> int:
             problem = fixed_total_problem(graph, palette_size, vertex_colours)
             result = solve_dsatur(problem, limits=limits)
             if result.status is SolveStatus.WITNESS:
-                assert result.assignment is not None
+                if result.assignment is None:
+                    counts["errors"] += 1
+                    first_non_witness = {
+                        "classification": "invalid_solver_witness",
+                        "detail": ["solver returned WITNESS without an assignment"],
+                        "graph6": graph.to_graph6(),
+                        "graph_fingerprint": graph.fingerprint,
+                        "palette_size": palette_size,
+                        "problem_digest": problem.semantic_digest,
+                        "vertex_colours": list(vertex_colours),
+                    }
+                    break
                 issues = independent_witness_issues(
                     graph,
                     palette_size,

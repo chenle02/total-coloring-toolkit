@@ -143,6 +143,8 @@ def test_order_six_cyclic_fan_state_is_extendable() -> None:
     )
     assert graph.to_graph6() == "EUzo"
     vertex_colours = (3, 1, 2, 4, 4, 5)
+    assert set(vertex_colours) == {1, 2, 3, 4, 5}
+    assert 0 not in vertex_colours
     partial_edge_colours = {
         (0, 2): 0,
         (0, 3): 1,
@@ -279,6 +281,44 @@ def test_solver_error_writes_fail_closed_receipt(
     receipt = json.loads(output.read_text(encoding="utf-8"))
     assert json.loads(capsys.readouterr().out) == receipt
     assert receipt["status"] == "error"
+    assert receipt["input_exhausted"] is False
+    assert receipt["stop_reason"] == "first_non_witness"
+    assert receipt["counts"]["errors"] == 1
+
+
+def test_witness_without_assignment_writes_fail_closed_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = load_script()
+    graph = SimpleGraph.from_edges(4, ((0, 1), (1, 2), (2, 3)))
+    output = tmp_path / "missing-assignment.json"
+    monkeypatch.setattr(
+        module, "parse_arguments", lambda: _script_arguments(output, max_graphs=None)
+    )
+    monkeypatch.setattr(
+        module,
+        "geng_identity",
+        lambda _spec, executable: GengIdentity(executable, "0" * 64, ("4",)),
+    )
+    monkeypatch.setattr(module, "stream_geng", lambda _spec, executable: iter((graph,)))
+    monkeypatch.setattr(
+        module,
+        "solve_dsatur",
+        lambda _problem, limits: SolveResult(
+            status=SolveStatus.WITNESS,
+            problem_digest="0" * 64,
+            assignment=None,
+            stats=SearchStats(nodes=1, backtracks=0, elapsed_seconds=0.0),
+            detail="synthetic malformed witness",
+        ),
+    )
+
+    assert module.main() == 2
+    receipt = json.loads(output.read_text(encoding="utf-8"))
+    assert json.loads(capsys.readouterr().out) == receipt
+    assert receipt["status"] == "invalid_solver_witness"
     assert receipt["input_exhausted"] is False
     assert receipt["stop_reason"] == "first_non_witness"
     assert receipt["counts"]["errors"] == 1
