@@ -10,12 +10,13 @@ forced fan edges.  It then enumerates proper partial edge-colourings which
 block the two distinguished ``alpha`` paths for every non-alpha colour.
 
 The optional ``all-partial`` alpha scope starts from every proper partial
-alpha matching, rather than assuming alpha-perfectness.  A nonperfect alpha
-matching is rejected only after recording an uncovered fixed-colour terminal:
-the terminal cannot carry an edge of its own fixed colour, so either of the
-required blocked alternating paths can reach it only through an alpha edge.
-The remaining exact fan-conflict and distinguished-hole-link prunes are also
-recorded before the expensive non-alpha matching search.
+alpha matching, rather than assuming alpha-perfectness.  For a nonperfect
+matching it computes the first uncovered fixed-colour terminal and increments
+an aggregate canonical histogram; it does not emit one witness per pruned
+matching.  The terminal cannot carry an edge of its own fixed colour, so
+either required blocked alternating path can reach it only through an alpha
+edge.  The remaining exact fan-conflict and distinguished-hole-link prunes
+are also counted before the expensive non-alpha matching search.
 
 Two profile scopes are deliberately separate:
 
@@ -49,7 +50,7 @@ import json
 import os
 import signal
 import sys
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from itertools import combinations, pairwise, product
@@ -97,9 +98,15 @@ FROZEN_MISSING = (
 )
 
 RUN_SCHEMA = "total-coloring.paired-hole-orbit-run.v2"
-RECORD_SCHEMA = "total-coloring.paired-hole-orbit-candidate.v1"
+RECORD_SCHEMA = "total-coloring.paired-hole-orbit-candidate.v2"
 ProfileScope = Literal["frozen", "canonical-fan"]
 AlphaScope = Literal["perfect", "all-partial"]
+AlphaFrontierStage = Literal[
+    "nonperfect_terminal_coverage_prune",
+    "perfect_forced_fan_conflict_prune",
+    "perfect_distinguished_hole_link_prune",
+    "admissible_for_edge_search",
+]
 RunStatus = Literal[
     "running",
     "complete_generation",
@@ -287,6 +294,67 @@ def alpha_terminal_coverage_failure(
             distinguished_holes=holes,
         )
     return None
+
+
+@dataclass(frozen=True, slots=True)
+class AlphaFrontierClassification:
+    """Canonical first applicable alpha-frontier stage."""
+
+    stage: AlphaFrontierStage
+    terminal_coverage_failure: AlphaTerminalCoverageFailure | None = None
+
+
+def classify_alpha_frontier_work_unit(
+    alpha_matching: tuple[tuple[int, int], ...],
+    vertex_colours: tuple[int, ...],
+) -> AlphaFrontierClassification:
+    """Classify one partial alpha matching by the ordered exact prunes."""
+
+    failure = alpha_terminal_coverage_failure(alpha_matching, vertex_colours)
+    if failure is not None:
+        return AlphaFrontierClassification(
+            stage="nonperfect_terminal_coverage_prune",
+            terminal_coverage_failure=failure,
+        )
+    alpha_edges = frozenset(alpha_matching)
+    if alpha_edges & frozenset(FAN_EDGES.values()):
+        return AlphaFrontierClassification(stage="perfect_forced_fan_conflict_prune")
+    if alpha_edges & frozenset(DISTINGUISHED_HOLES.values()):
+        return AlphaFrontierClassification(stage="perfect_distinguished_hole_link_prune")
+    return AlphaFrontierClassification(stage="admissible_for_edge_search")
+
+
+def canonical_terminal_failure_histogram(
+    first_failure_counts: Mapping[tuple[int, int], int],
+    *,
+    expected_total: int,
+) -> list[dict[str, object]]:
+    """Return sorted typed aggregate rows and enforce their sum invariant."""
+
+    if expected_total < 0:
+        raise ValueError("expected terminal-failure total must be nonnegative")
+    rows: list[dict[str, object]] = []
+    observed_total = 0
+    for (terminal, fixed_colour), count in sorted(first_failure_counts.items()):
+        if not 0 <= terminal < ORDER:
+            raise ValueError("terminal-failure histogram vertex is out of range")
+        holes = DISTINGUISHED_HOLES.get(fixed_colour)
+        if holes is None or terminal in holes:
+            raise ValueError("terminal-failure histogram has an invalid fixed-colour role")
+        if count <= 0:
+            raise ValueError("terminal-failure histogram counts must be positive")
+        rows.append(
+            {
+                "count": count,
+                "distinguished_holes": list(holes),
+                "fixed_colour": fixed_colour,
+                "terminal": terminal,
+            }
+        )
+        observed_total += count
+    if observed_total != expected_total:
+        raise RuntimeError("terminal first-failure histogram does not match prune count")
+    return rows
 
 
 def alpha_matchings_for_scope(
@@ -1370,7 +1438,8 @@ def _scope_metadata(config: SearchConfig) -> dict[str, object]:
             if config.alpha_scope == "perfect"
             else (
                 "every proper partial alpha matching; nonperfect units are pruned by an "
-                "explicit uncovered fixed-colour terminal before non-alpha generation"
+                "explicit first-uncovered fixed-colour terminal count before non-alpha "
+                "generation; no per-unit prune witness is emitted"
             )
         ),
         "profile_scope_note": (
@@ -1422,6 +1491,8 @@ def _scope_metadata(config: SearchConfig) -> dict[str, object]:
 def _record_payload(
     *,
     candidate_index: int,
+    run_config_fingerprint: str,
+    alpha_scope: AlphaScope,
     vertex_profile_index: int,
     alpha_global_ordinal: int,
     alpha_profile_ordinal: int,
@@ -1466,6 +1537,7 @@ def _record_payload(
     return {
         "candidate_fingerprint": sha256_bytes(raw_state),
         "candidate_index": candidate_index,
+        "run_config_fingerprint": run_config_fingerprint,
         "detachment_analysis": detachment_analysis(
             state,
             proposal,
@@ -1548,6 +1620,7 @@ def _record_payload(
         "derived_analysis": derived_state,
         "raw_state": raw_state,
         "work_unit": {
+            "alpha_scope": alpha_scope,
             "alpha_global_ordinal": alpha_global_ordinal,
             "alpha_profile_ordinal": alpha_profile_ordinal,
             "missing_profile_ordinal": missing_profile_ordinal,
@@ -1582,6 +1655,7 @@ def run_search(
     config_fingerprint = sha256_bytes(config_payload)
     script_path = Path(__file__)
     run_manifest = {
+        "alpha_terminal_coverage_first_failure_histogram": [],
         "config": config_payload,
         "config_fingerprint": config_fingerprint,
         "schema_version": RUN_SCHEMA,
@@ -1592,6 +1666,7 @@ def run_search(
 
     records_path = config.output_dir / "candidates.jsonl"
     counts = RunCounts()
+    terminal_failure_counts: Counter[tuple[int, int]] = Counter()
     alpha_global_ordinal = 0
     stop_reason = "configured_input_exhausted"
     status: RunStatus = "complete_generation"
@@ -1600,8 +1675,13 @@ def run_search(
         current_status: RunStatus,
         current_stop_reason: str,
     ) -> dict[str, object]:
+        terminal_histogram = canonical_terminal_failure_histogram(
+            terminal_failure_counts,
+            expected_total=counts.alpha_nonperfect_terminal_coverage_prunes,
+        )
         return {
             **run_manifest,
+            "alpha_terminal_coverage_first_failure_histogram": terminal_histogram,
             "counts": asdict(counts),
             "checkpoint_resumable": False,
             "input_exhausted": current_status == "complete_generation",
@@ -1646,28 +1726,39 @@ def run_search(
                         raise _BoundedStop("max_alpha_work_units")
                     counts.alpha_matchings_assigned_to_shard += 1
 
-                    coverage_failure = alpha_terminal_coverage_failure(
-                        alpha_matching,
-                        vertex_colours,
-                    )
-                    if coverage_failure is not None:
-                        if config.alpha_scope != "all-partial":
+                    if config.alpha_scope == "all-partial":
+                        alpha_classification = classify_alpha_frontier_work_unit(
+                            alpha_matching,
+                            vertex_colours,
+                        )
+                    else:
+                        if alpha_terminal_coverage_failure(alpha_matching, vertex_colours):
                             raise RuntimeError("perfect alpha scope produced an uncovered terminal")
+                        alpha_classification = AlphaFrontierClassification(
+                            stage="admissible_for_edge_search"
+                        )
+
+                    coverage_failure = alpha_classification.terminal_coverage_failure
+                    if alpha_classification.stage == "nonperfect_terminal_coverage_prune":
+                        assert coverage_failure is not None
                         counts.alpha_nonperfect_terminal_coverage_prunes += 1
+                        terminal_failure_counts[
+                            (coverage_failure.terminal, coverage_failure.fixed_colour)
+                        ] += 1
                         finish_alpha_work_unit()
                         continue
 
                     counts.alpha_perfect_work_units += 1
-                    if config.alpha_scope == "all-partial":
-                        alpha_edges = frozenset(alpha_matching)
-                        if alpha_edges & frozenset(FAN_EDGES.values()):
-                            counts.alpha_forced_fan_conflict_prunes += 1
-                            finish_alpha_work_unit()
-                            continue
-                        if alpha_edges & frozenset(DISTINGUISHED_HOLES.values()):
-                            counts.alpha_distinguished_hole_link_prunes += 1
-                            finish_alpha_work_unit()
-                            continue
+                    if alpha_classification.stage == "perfect_forced_fan_conflict_prune":
+                        counts.alpha_forced_fan_conflict_prunes += 1
+                        finish_alpha_work_unit()
+                        continue
+                    if alpha_classification.stage == "perfect_distinguished_hole_link_prune":
+                        counts.alpha_distinguished_hole_link_prunes += 1
+                        finish_alpha_work_unit()
+                        continue
+                    if alpha_classification.stage != "admissible_for_edge_search":
+                        raise RuntimeError("unsupported alpha-frontier classification")
                     counts.alpha_admissible_for_edge_search += 1
                     derived_profiles: set[str] = set()
 
@@ -1788,6 +1879,8 @@ def run_search(
                             counts.orbit_exhausted_without_release += 1
                         payload = _record_payload(
                             candidate_index=counts.candidate_states_emitted,
+                            run_config_fingerprint=config_fingerprint,
+                            alpha_scope=config.alpha_scope,
                             vertex_profile_index=current_vertex_profile_index,
                             alpha_global_ordinal=current_alpha_global_ordinal,
                             alpha_profile_ordinal=current_alpha_profile_ordinal,

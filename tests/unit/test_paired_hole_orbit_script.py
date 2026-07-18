@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from collections import Counter
 from itertools import product
 from pathlib import Path
 from types import ModuleType
@@ -96,6 +97,31 @@ def test_nonperfect_alpha_has_a_fixed_terminal_coverage_obstruction() -> None:
     )
 
 
+def test_terminal_failure_histogram_is_sorted_typed_and_sum_checked() -> None:
+    module = load_script()
+    histogram = module.canonical_terminal_failure_histogram(
+        {(8, 3): 2, (0, 1): 5},
+        expected_total=7,
+    )
+
+    assert histogram == [
+        {
+            "count": 5,
+            "distinguished_holes": [2, 3],
+            "fixed_colour": 1,
+            "terminal": 0,
+        },
+        {
+            "count": 2,
+            "distinguished_holes": [0, 5],
+            "fixed_colour": 3,
+            "terminal": 8,
+        },
+    ]
+    with pytest.raises(RuntimeError, match="does not match prune count"):
+        module.canonical_terminal_failure_histogram({(0, 1): 1}, expected_total=2)
+
+
 def test_independent_alpha_frontier_counts_exact_stage_partition() -> None:
     audit = load_alpha_frontier_audit()
     receipt = audit.build_receipt()
@@ -112,6 +138,39 @@ def test_independent_alpha_frontier_counts_exact_stage_partition() -> None:
     assert totals["proper_perfect_alpha_matchings"] == 347_904
     assert {row["proper_partial_alpha_matchings"] for row in receipt["profile_rows"]} == {86_397}
     assert {row["proper_perfect_alpha_matchings"] for row in receipt["profile_rows"]} == {5_436}
+
+
+def test_one_profile_streaming_alpha_stages_agree_with_independent_audit() -> None:
+    module = load_script()
+    audit = load_alpha_frontier_audit()
+    profiles = module.canonical_vertex_colour_profiles()
+    profile_index = profiles.index(module.FROZEN_VERTEX_COLOURS)
+    row = audit.build_receipt()["profile_rows"][profile_index]
+
+    stages = Counter(
+        module.classify_alpha_frontier_work_unit(matching, module.FROZEN_VERTEX_COLOURS).stage
+        for matching in module.alpha_matchings_for_scope(
+            "all-partial", module.FROZEN_VERTEX_COLOURS
+        )
+    )
+
+    assert stages == {
+        "nonperfect_terminal_coverage_prune": row["nonperfect_terminal_coverage_prunes"],
+        "perfect_forced_fan_conflict_prune": row["perfect_forced_fan_conflict_prunes"],
+        "perfect_distinguished_hole_link_prune": row["perfect_distinguished_hole_link_prunes"],
+        "admissible_for_edge_search": row["admissible_for_edge_search"],
+    }
+    assert sum(stages.values()) == row["proper_partial_alpha_matchings"]
+    assert (
+        stages["perfect_forced_fan_conflict_prune"]
+        + stages["perfect_distinguished_hole_link_prune"]
+        + stages["admissible_for_edge_search"]
+        == row["proper_perfect_alpha_matchings"]
+    )
+    assert (
+        stages["nonperfect_terminal_coverage_prune"]
+        == row["proper_partial_alpha_matchings"] - row["proper_perfect_alpha_matchings"]
+    )
 
 
 def test_all_partial_canary_ordinals_are_stable_within_frozen_profile() -> None:
@@ -242,6 +301,14 @@ def test_frozen_profile_reproduces_eight_unique_one_swap_states(tmp_path: Path) 
     assert all(record["orbit_proposal"]["depth"] == 1 for record in records)
     assert all(record["residual_classification"] == "easy_exit_present" for record in records)
     assert all(
+        record["schema_version"] == "total-coloring.paired-hole-orbit-candidate.v2"
+        for record in records
+    )
+    assert all(
+        record["run_config_fingerprint"] == result["config_fingerprint"] for record in records
+    )
+    assert all(record["work_unit"]["alpha_scope"] == "perfect" for record in records)
+    assert all(
         {cross_exit["root"] for cross_exit in record["easy_exits"]["direct_cross"]} == {0, 1}
         for record in records
     )
@@ -264,6 +331,13 @@ def test_frozen_profile_reproduces_eight_unique_one_swap_states(tmp_path: Path) 
     assert len(raw_state["edge_colors"]) == len(raw_state["graph"]["edges"])
     assert sum(colour is None for colour in raw_state["edge_colors"]) == 1
     assert records[0]["candidate_fingerprint"] == module.sha256_bytes(raw_state)
+    assert (
+        json.loads((output / "run.json").read_text())[
+            "alpha_terminal_coverage_first_failure_histogram"
+        ]
+        == []
+    )
+    assert result["alpha_terminal_coverage_first_failure_histogram"] == []
 
     counts = result["counts"]
     assert counts["vertex_colour_profiles_seen"] == 1
@@ -395,8 +469,65 @@ def test_all_partial_scope_records_terminal_coverage_prune_before_edge_search(
     assert counts["alpha_admissible_for_edge_search"] == 0
     assert counts["edge_colour_matchings_generated"] == 0
     assert counts["candidate_states_emitted"] == 0
+    histogram = result["alpha_terminal_coverage_first_failure_histogram"]
+    assert histogram == [
+        {
+            "count": 1,
+            "distinguished_holes": [2, 3],
+            "fixed_colour": 1,
+            "terminal": 0,
+        }
+    ]
+    assert (
+        sum(row["count"] for row in histogram)
+        == counts["alpha_nonperfect_terminal_coverage_prunes"]
+    )
+    assert (
+        json.loads((output / "checkpoint.json").read_text())[
+            "alpha_terminal_coverage_first_failure_histogram"
+        ]
+        == histogram
+    )
     assert (output / "candidates.jsonl").read_bytes() == b""
     assert not (output / "completion.json").exists()
+
+
+def test_near_perfect_singleton_canary_records_only_aggregate_first_failure(
+    tmp_path: Path,
+) -> None:
+    module = load_script()
+    output = tmp_path / "near-perfect-canary"
+    result = module.run_search(
+        module.SearchConfig(
+            output_dir=output,
+            profile_scope="canonical-fan",
+            alpha_scope="all-partial",
+            shard_count=5_529_408,
+            shard_index=3_166_734,
+            checkpoint_interval=1,
+        )
+    )
+
+    assert result["status"] == "complete_generation"
+    assert result["counts"]["alpha_matchings_seen"] == 5_529_408
+    assert result["counts"]["alpha_matchings_assigned_to_shard"] == 1
+    assert result["counts"]["alpha_nonperfect_terminal_coverage_prunes"] == 1
+    assert result["counts"]["candidate_states_emitted"] == 0
+    assert result["alpha_terminal_coverage_first_failure_histogram"] == [
+        {
+            "count": 1,
+            "distinguished_holes": [0, 5],
+            "fixed_colour": 3,
+            "terminal": 8,
+        }
+    ]
+    assert (output / "candidates.jsonl").read_bytes() == b""
+    assert (
+        json.loads((output / "run.json").read_text())[
+            "alpha_terminal_coverage_first_failure_histogram"
+        ]
+        == []
+    )
 
 
 def test_output_directory_must_be_new_and_scope_limits_are_explicit(tmp_path: Path) -> None:

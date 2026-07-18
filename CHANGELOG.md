@@ -21,6 +21,9 @@ All notable changes are documented here. The project follows
 
 ### Changed
 
+- Bind paired-hole candidate records to their run configuration in record
+  schema v2, and aggregate nonperfect alpha prunes by canonical first uncovered
+  terminal without emitting millions of per-unit witnesses.
 - Expand the first step of the paired-hole two-swap orbit from alpha-role and
   A-by-B pairs to every pair of the seven normalized role colors, including
   the vertex-role--hole-role detachments exposed by the ambient F0 audit.

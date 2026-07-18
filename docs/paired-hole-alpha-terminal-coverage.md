@@ -70,7 +70,16 @@ the blockage condition. Both are exact semantic prunes.
 The independent script
 `scripts/research/paired_hole_alpha_frontier_audit.py` recomputes these counts
 with bit-mask dynamic programming. It does not import the streaming generator.
-The generator itself records each prune class in its completion receipt.
+The generator itself records each prune class in its completion receipt. For
+the nonperfect class it also maintains a sorted list of typed aggregate rows
+
+```text
+{terminal, fixed_colour, distinguished_holes, count}.
+```
+
+The row counts sum exactly to the nonperfect-prune counter. `run.json` starts
+with the empty histogram; checkpoints and completion contain the observed
+aggregate. No per-work-unit pruned raw state or terminal witness is emitted.
 
 ## Semantic verification boundary
 
@@ -79,7 +88,9 @@ all twelve blockage arms from the raw graph and returns out-of-scope when a
 terminal is not covered. The new frontier audit covers work units that are
 pruned before a complete raw state exists; emitted candidates continue through
 the existing dependency-free semantic verifier and fresh colouring-certificate
-checks.
+checks. Candidate-record schema v2 binds every emitted record to the enclosing
+run's configuration fingerprint while keeping the raw-state fingerprint
+unchanged.
 
 An exhausted all-partial campaign therefore supports only this finite claim:
 within the normalized exact cell, dropping `AlphaPerfect` from the generator's

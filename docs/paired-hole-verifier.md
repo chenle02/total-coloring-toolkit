@@ -84,11 +84,18 @@ after preserving these semantic fields; reducing them to an unverified Boolean
 would discard the structural evidence needed for the next proof lemma.
 
 The exact-cell generator also has an `all-partial` alpha scope. It does not
-weaken this verifier. Instead, it records an uncovered fixed-colour terminal
-for every nonperfect alpha matching before non-alpha edge generation. The
-[terminal-coverage note](paired-hole-alpha-terminal-coverage.md) proves why all
-twelve blockage arms force alpha-perfectness and records the independent
+weaken this verifier. Instead, it computes the first uncovered fixed-colour
+terminal for each nonperfect alpha matching and increments a canonical
+aggregate histogram before non-alpha edge generation. It does not emit one
+raw witness per prune. The
+[terminal-coverage note](paired-hole-alpha-terminal-coverage.md) proves why
+all twelve blockage arms force alpha-perfectness and records the independent
 finite frontier audit.
+
+Candidate record schema v2 retains the raw-state-only `candidate_fingerprint`
+and adds a top-level `run_config_fingerprint`. Readback must compare that field
+with the enclosing completion receipt's `config_fingerprint`; the work-unit
+record also states its `alpha_scope` explicitly.
 
 When several bounded two-swap exits exist, the retained certificate is chosen
 deterministically: `alpha`--role first-move pairs precede cross pairs, followed
@@ -103,9 +110,12 @@ orientation.
 ## Dependency-free JSONL readback
 
 The following standalone snippet streams generator records from standard
-input. It treats `raw_state` as the sole semantic input, checks the generator's
-state fingerprint, replays the verifier, and emits one canonical aggregate
-receipt. Redirect its output to a file when reading back a cluster shard.
+input. Pass the enclosing completion receipt's `config_fingerprint` as its one
+argument. It treats `raw_state` as the sole semantic input, checks the
+raw-state fingerprint without folding run metadata into it, binds every record
+to that run configuration, replays the verifier, and emits one canonical
+aggregate receipt. Redirect its output to a file when reading back a cluster
+shard.
 
 ```python
 from __future__ import annotations
@@ -119,11 +129,18 @@ from total_coloring.paired_hole import PairedHoleState, verify_paired_hole_state
 
 counts: Counter[str] = Counter()
 failures: list[dict[str, object]] = []
+if len(sys.argv) != 2:
+    raise SystemExit("usage: readback.py RUN_CONFIG_FINGERPRINT")
+expected_run_config_fingerprint = sys.argv[1]
 for line_index, line in enumerate(sys.stdin.buffer):
     try:
         record = strict_json_loads(line)
         if not isinstance(record, dict):
             raise ValueError("record is not an object")
+        if record.get("schema_version") != "total-coloring.paired-hole-orbit-candidate.v2":
+            raise ValueError("candidate record schema mismatch")
+        if record.get("run_config_fingerprint") != expected_run_config_fingerprint:
+            raise ValueError("run config fingerprint mismatch")
         state = PairedHoleState.from_dict(cast(dict[str, object], record["raw_state"]))
         expected = record["candidate_fingerprint"]
         if expected != state.fingerprint:
@@ -134,6 +151,7 @@ for line_index, line in enumerate(sys.stdin.buffer):
         failures.append({"line_index": line_index, "detail": str(exc)})
 
 receipt = {
+    "run_config_fingerprint": expected_run_config_fingerprint,
     "record_count": sum(counts.values()) + len(failures),
     "counts": dict(sorted(counts.items())),
     "failures": failures,
