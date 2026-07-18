@@ -108,6 +108,25 @@ def in_scope(graph: SimpleGraph, core_kind: str) -> bool:
             degree[left] += 1
             degree[right] += 1
         return max(degree, default=0) <= 1
+    if core_kind == "tight-matching-residue":
+        degree = [0] * graph.order
+        for left, right in edges:
+            degree[left] += 1
+            degree[right] += 1
+        if max(degree, default=0) > 1:
+            return False
+        maximum = graph.max_degree
+        adjacency: list[set[int]] = [set() for _ in range(graph.order)]
+        for left, right in graph.edges:
+            adjacency[left].add(right)
+            adjacency[right].add(left)
+        return any(
+            sum(graph.degree(neighbor) == maximum - 1 for neighbor in adjacency[left] - {right})
+            >= 2
+            and sum(graph.degree(neighbor) == maximum - 1 for neighbor in adjacency[right] - {left})
+            >= 2
+            for left, right in edges
+        )
     raise ValueError(f"unsupported core kind: {core_kind}")
 
 
@@ -133,9 +152,18 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--split-depth", type=int, default=2)
     parser.add_argument(
         "--core-kind",
-        choices=("matching-nonempty", "forest-nonempty", "any-nonempty"),
+        choices=(
+            "matching-nonempty",
+            "tight-matching-residue",
+            "forest-nonempty",
+            "any-nonempty",
+        ),
         default="matching-nonempty",
     )
+    parser.add_argument("--connected", action="store_true")
+    parser.add_argument("--min-degree", type=int)
+    parser.add_argument("--max-degree", type=int)
+    parser.add_argument("--required-maximum-degree", type=int)
     parser.add_argument("--geng", default="geng")
     parser.add_argument("--max-graphs", type=int)
     parser.add_argument("--max-nodes-per-search", type=int)
@@ -166,9 +194,14 @@ def main() -> int:
         raise SystemExit("--shard-index must lie in [0, --shard-count)")
     if arguments.max_graphs is not None and arguments.max_graphs <= 0:
         raise SystemExit("--max-graphs must be positive")
+    if arguments.required_maximum_degree is not None and arguments.required_maximum_degree < 0:
+        raise SystemExit("--required-maximum-degree must be nonnegative")
 
     spec = GengSpec(
         order=arguments.order,
+        connected=arguments.connected,
+        min_degree=arguments.min_degree,
+        max_degree=arguments.max_degree,
         shard_index=arguments.shard_index,
         shard_count=arguments.shard_count,
         split_depth=arguments.split_depth,
@@ -192,6 +225,11 @@ def main() -> int:
 
     for graph in stream_geng(spec, executable=arguments.geng):
         counts["generated_graphs"] += 1
+        if (
+            arguments.required_maximum_degree is not None
+            and graph.max_degree != arguments.required_maximum_degree
+        ):
+            continue
         if not in_scope(graph, arguments.core_kind):
             continue
         counts["scope_graphs"] += 1
@@ -249,10 +287,14 @@ def main() -> int:
             "counterexample without an independent negative proof"
         ),
         "config": {
+            "connected": arguments.connected,
             "core_kind": arguments.core_kind,
             "max_graphs": arguments.max_graphs,
+            "max_degree": arguments.max_degree,
             "max_nodes_per_search": arguments.max_nodes_per_search,
+            "min_degree": arguments.min_degree,
             "order": arguments.order,
+            "required_maximum_degree": arguments.required_maximum_degree,
             "shard_count": arguments.shard_count,
             "shard_index": arguments.shard_index,
             "split_depth": arguments.split_depth,

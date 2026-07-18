@@ -42,6 +42,40 @@ def test_matching_core_scope_excludes_independent_and_nonmatching_cores() -> Non
     assert not module.in_scope(cycle, "forest-nonempty")
 
 
+def test_tight_matching_residue_recognizes_first_order_ten_template() -> None:
+    module = load_script()
+    graph = SimpleGraph.from_edges(
+        10,
+        (
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (1, 5),
+            (1, 6),
+            (1, 7),
+            (2, 5),
+            (2, 8),
+            (3, 6),
+            (3, 9),
+            (5, 7),
+            (6, 8),
+        ),
+    )
+
+    assert graph.degrees == (4, 4, 3, 3, 1, 3, 3, 2, 2, 1)
+    assert module.in_scope(graph, "matching-nonempty")
+    assert module.in_scope(graph, "tight-matching-residue")
+
+    vertex_colours = (3, 5, 4, 4, 5, 3, 1, 1, 2, 2)
+    assert module.is_proper_vertex_coloring(graph, vertex_colours)
+    problem = module.fixed_total_problem(graph, 6, vertex_colours)
+    result = module.solve_dsatur(problem, limits=module.SearchLimits())
+    assert result.status is module.SolveStatus.WITNESS
+    assert result.assignment is not None
+    assert problem.verify_assignment(result.assignment) == ()
+
+
 def test_fixed_problem_requires_the_prescribed_vertex_colours() -> None:
     module = load_script()
     graph = SimpleGraph.from_edges(3, ((0, 1), (1, 2)))
