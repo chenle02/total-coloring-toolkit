@@ -82,3 +82,25 @@ def test_fixed_problem_requires_the_prescribed_vertex_colours() -> None:
     problem = module.fixed_total_problem(graph, 4, (0, 1, 0))
     assert problem.fixed_colors == ((0, 0), (1, 1), (2, 0))
     assert problem.verify_assignment((0, 1, 0, 2, 3)) == ()
+
+    valid_assignment = (0, 1, 0, 2, 3)
+    assert module.independent_witness_issues(graph, 4, (0, 1, 0), valid_assignment) == ()
+    assert module.independent_witness_issues(graph, 4, (1, 0, 1), valid_assignment) == (
+        "fixed_vertex_mismatch:vertices[0]",
+        "fixed_vertex_mismatch:vertices[1]",
+        "fixed_vertex_mismatch:vertices[2]",
+    )
+    assert "adjacent_edges_same_color:edge_colors[1]" in module.independent_witness_issues(
+        graph,
+        4,
+        (0, 1, 0),
+        (0, 1, 0, 2, 2),
+    )
+
+
+def test_non_witness_statuses_map_to_receipt_counters() -> None:
+    module = load_script()
+
+    assert module.non_witness_count_key(module.SolveStatus.CANDIDATE_UNSAT) == "candidate_unsat"
+    assert module.non_witness_count_key(module.SolveStatus.UNKNOWN) == "unknown"
+    assert module.non_witness_count_key(module.SolveStatus.ERROR) == "errors"

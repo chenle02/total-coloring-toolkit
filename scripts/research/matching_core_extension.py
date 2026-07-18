@@ -25,13 +25,52 @@ from collections.abc import Iterator
 from dataclasses import asdict
 from pathlib import Path
 
+from total_coloring.certificates import TotalColoringCertificate, verify_total_coloring
 from total_coloring.geng import GengSpec, geng_identity, stream_geng
 from total_coloring.graph import SimpleGraph
 from total_coloring.model import ColoringProblem
 from total_coloring.solver import SearchLimits, SolveStatus, solve_dsatur
-from total_coloring.total import total_coloring_problem
+from total_coloring.total import split_total_assignment, total_coloring_problem
 
-SCHEMA_VERSION = "total-coloring.matching-core-extension-run.v1"
+SCHEMA_VERSION = "total-coloring.matching-core-extension-run.v2"
+
+
+def non_witness_count_key(status: SolveStatus) -> str:
+    """Map a non-witness solver status to its receipt counter."""
+
+    return "errors" if status is SolveStatus.ERROR else status.value
+
+
+def independent_witness_issues(
+    graph: SimpleGraph,
+    palette_size: int,
+    prescribed_vertex_colours: tuple[int, ...],
+    assignment: tuple[int, ...],
+) -> tuple[str, ...]:
+    """Check a solver proposal without reusing its conflict encoding."""
+
+    try:
+        vertex_colours, edge_colours = split_total_assignment(graph, assignment)
+        certificate = TotalColoringCertificate.create(
+            graph,
+            palette_size,
+            vertex_colours,
+            edge_colours,
+        )
+    except ValueError as error:
+        return (f"certificate_format:{error}",)
+
+    issues = [
+        f"fixed_vertex_mismatch:vertices[{vertex}]"
+        for vertex, (actual, prescribed) in enumerate(
+            zip(vertex_colours, prescribed_vertex_colours, strict=True)
+        )
+        if actual != prescribed
+    ]
+    issues.extend(
+        f"{issue.code}:{issue.path}" for issue in verify_total_coloring(graph, certificate).issues
+    )
+    return tuple(issues)
 
 
 def bounded_pair_partitions(order: int, max_blocks: int) -> Iterator[tuple[int, ...]]:
@@ -222,6 +261,8 @@ def main() -> int:
         "errors": 0,
     }
     first_non_witness: dict[str, object] | None = None
+    input_exhausted = False
+    stop_reason = "generator_exhausted"
 
     for graph in stream_geng(spec, executable=arguments.geng):
         counts["generated_graphs"] += 1
@@ -243,12 +284,17 @@ def main() -> int:
             result = solve_dsatur(problem, limits=limits)
             if result.status is SolveStatus.WITNESS:
                 assert result.assignment is not None
-                violations = problem.verify_assignment(result.assignment)
-                if violations:
+                issues = independent_witness_issues(
+                    graph,
+                    palette_size,
+                    vertex_colours,
+                    result.assignment,
+                )
+                if issues:
                     counts["errors"] += 1
                     first_non_witness = {
                         "classification": "invalid_solver_witness",
-                        "detail": list(violations),
+                        "detail": list(issues),
                         "graph6": graph.to_graph6(),
                         "graph_fingerprint": graph.fingerprint,
                         "palette_size": palette_size,
@@ -259,7 +305,7 @@ def main() -> int:
                 counts["verified_witnesses"] += 1
                 continue
 
-            counts[result.status.value] += 1
+            counts[non_witness_count_key(result.status)] += 1
             first_non_witness = {
                 "classification": result.status.value,
                 "detail": result.detail,
@@ -272,13 +318,20 @@ def main() -> int:
             }
             break
         if first_non_witness is not None:
+            stop_reason = "first_non_witness"
             break
         if arguments.max_graphs is not None and counts["scope_graphs"] >= arguments.max_graphs:
+            stop_reason = "max_graphs"
             break
+    else:
+        input_exhausted = True
 
-    status = (
-        "complete_positive" if first_non_witness is None else first_non_witness["classification"]
-    )
+    if first_non_witness is not None:
+        status = first_non_witness["classification"]
+    elif input_exhausted:
+        status = "complete_positive"
+    else:
+        status = "bounded_positive"
     receipt = {
         "schema_version": SCHEMA_VERSION,
         "status": status,
@@ -286,6 +339,9 @@ def main() -> int:
             "bounded finite falsification only; candidate_unsat is not a mathematical "
             "counterexample without an independent negative proof"
         ),
+        "input_exhausted": input_exhausted,
+        "stop_reason": stop_reason,
+        "positive_verifier": "total-coloring.certificate.v1",
         "config": {
             "connected": arguments.connected,
             "core_kind": arguments.core_kind,
