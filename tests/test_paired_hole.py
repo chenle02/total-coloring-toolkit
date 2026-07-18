@@ -112,6 +112,43 @@ def cross_cross_residual_state() -> PairedHoleState:
     return state_from_coloring(vertex_colors, cast(dict[tuple[int, int], int], edge_colors))
 
 
+def h2_equality_ambient_state() -> PairedHoleState:
+    """Return the D=8 equality-cell stress test for the internal role orbit."""
+
+    vertex_colors = (1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 7, 8)
+    color_classes = {
+        0: ((0, 8), (1, 10), (2, 11), (3, 6), (4, 9), (5, 7), (12, 13)),
+        1: ((1, 8), (4, 5), (7, 13), (9, 12), (10, 11)),
+        2: ((0, 9), (2, 3), (6, 12), (8, 10), (11, 13)),
+        3: ((1, 4), (3, 7), (6, 11), (9, 13), (10, 12)),
+        4: ((1, 5), (2, 6), (7, 12), (8, 11), (10, 13)),
+        5: ((0, 2), (5, 6), (7, 9), (8, 13), (11, 12)),
+        6: ((0, 3), (4, 7), (6, 13), (8, 12), (9, 10)),
+        7: ((0, 10), (1, 11), (2, 5), (3, 8), (4, 6)),
+        8: ((0, 7), (1, 3), (2, 4), (5, 9)),
+    }
+    edge_colors = {
+        tuple(sorted(edge)): color for color, edges in color_classes.items() for edge in edges
+    }
+    normalized_edge_colors = cast(dict[tuple[int, int], int], edge_colors)
+    graph = SimpleGraph.from_edges(len(vertex_colors), (*normalized_edge_colors, (0, 1)))
+    return PairedHoleState.create(
+        graph=graph,
+        degree_parameter=7,
+        palette_size=9,
+        vertex_colors=vertex_colors,
+        edge_colors=(normalized_edge_colors.get(edge) for edge in graph.edges),
+        uncolored_edge=(0, 1),
+        alpha=0,
+        roles=PairedHoleRoles(
+            x=0,
+            y=1,
+            x_fan_satellites=(2, 3),
+            y_fan_satellites=(4, 5),
+        ),
+    )
+
+
 def nonaligned_terminal_release_state() -> PairedHoleState:
     vertex_colors = (1, 2, 2, 3, 1, 5, 3, 4, 4, 5, 6, 6)
     color_classes = {
@@ -291,6 +328,21 @@ def test_cross_cross_detachment_has_independently_verified_exit() -> None:
     assert orbit.topology.relation_before_first_move is CrossComponentRelation.LINKED
     assert orbit.topology.relation_after_first_move is CrossComponentRelation.DISTINCT
     assert orbit.topology.intersection_edges == ((3, 7),)
+    assert orbit.fill_color == 6
+    assert orbit.completion_certificate.verify(state.graph).valid
+
+
+def test_all_role_first_pairs_unlock_h2_equality_ambient_stress_test() -> None:
+    state = h2_equality_ambient_state()
+    orbit = paired_hole._derive_two_swap_orbit_exit(
+        state,
+        paired_hole._missing_colors(state),
+    )
+
+    assert orbit is not None
+    assert tuple(move.colors for move in orbit.moves) == ((3, 4), (3, 6))
+    assert orbit.moves[0].component.edges == ((1, 4), (1, 5))
+    assert orbit.moves[1].component.edges == ((0, 3), (3, 7), (4, 7))
     assert orbit.fill_color == 6
     assert orbit.completion_certificate.verify(state.graph).valid
 
