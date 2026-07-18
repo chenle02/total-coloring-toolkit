@@ -114,7 +114,7 @@ for line_index, line in enumerate(sys.stdin.buffer):
         if not isinstance(record, dict):
             raise ValueError("record is not an object")
         state = PairedHoleState.from_dict(cast(dict[str, object], record["raw_state"]))
-        expected = record["state_fingerprint"]
+        expected = record["candidate_fingerprint"]
         if expected != state.fingerprint:
             raise ValueError("state fingerprint mismatch")
         result = verify_paired_hole_state(state)
