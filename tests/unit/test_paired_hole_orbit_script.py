@@ -73,6 +73,24 @@ def test_pinned_one_work_unit_canary_ordinal_is_stable() -> None:
     assert profile_index * 5_436 + alpha_profile_ordinal == 199_186
 
 
+def test_pinned_cross_first_canary_ordinal_is_stable() -> None:
+    module = load_script()
+    profiles = module.canonical_vertex_colour_profiles()
+    profile_index = profiles.index(module.FROZEN_VERTEX_COLOURS)
+    target_alpha = tuple(sorted({(0, 8), (1, 10), (2, 11), (3, 6), (4, 9), (5, 7)}))
+    alpha_profile_ordinal = next(
+        index
+        for index, matching in enumerate(
+            module.perfect_matchings(tuple(range(12)), module.FROZEN_VERTEX_COLOURS)
+        )
+        if tuple(sorted(matching)) == target_alpha
+    )
+
+    assert profile_index == 36
+    assert alpha_profile_ordinal == 3_542
+    assert profile_index * 5_436 + alpha_profile_ordinal == 199_238
+
+
 def test_frozen_missing_profile_and_parity_enumerator_are_exact() -> None:
     module = load_script()
     frozen = tuple(
