@@ -83,6 +83,13 @@ data. Census code should count statuses only
 after preserving these semantic fields; reducing them to an unverified Boolean
 would discard the structural evidence needed for the next proof lemma.
 
+The exact-cell generator also has an `all-partial` alpha scope. It does not
+weaken this verifier. Instead, it records an uncovered fixed-colour terminal
+for every nonperfect alpha matching before non-alpha edge generation. The
+[terminal-coverage note](paired-hole-alpha-terminal-coverage.md) proves why all
+twelve blockage arms force alpha-perfectness and records the independent
+finite frontier audit.
+
 When several bounded two-swap exits exist, the retained certificate is chosen
 deterministically: `alpha`--role first-move pairs precede cross pairs, followed
 by the first component's canonical edge-index tuple, the second cross-color

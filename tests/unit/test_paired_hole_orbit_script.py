@@ -21,6 +21,18 @@ def load_script() -> ModuleType:
     return module
 
 
+def load_alpha_frontier_audit() -> ModuleType:
+    path = (
+        Path(__file__).parents[2] / "scripts" / "research" / "paired_hole_alpha_frontier_audit.py"
+    )
+    spec = importlib.util.spec_from_file_location("paired_hole_alpha_frontier_audit", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def read_records(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
 
@@ -53,6 +65,74 @@ def test_matching_enumerators_are_unique_and_complete_on_four_vertices() -> None
     assert len(partial) == len(set(partial)) == 10
     assert set(perfect) <= set(partial)
     assert () in partial
+
+
+def test_nonperfect_alpha_has_a_fixed_terminal_coverage_obstruction() -> None:
+    module = load_script()
+    alpha_matching = tuple(sorted({(0, 7), (1, 6), (2, 4), (3, 5), (10, 11)}))
+
+    failure = module.alpha_terminal_coverage_failure(
+        alpha_matching,
+        module.FROZEN_VERTEX_COLOURS,
+    )
+
+    assert failure == module.AlphaTerminalCoverageFailure(
+        terminal=8,
+        fixed_colour=3,
+        distinguished_holes=(0, 5),
+    )
+    assert all(
+        not module.blocks_distinguished_holes(
+            alpha_matching,
+            failure.fixed_colour,
+            beta_matching,
+            module.FROZEN_VERTEX_COLOURS,
+        )
+        for beta_matching in module.direct_colour_matchings(
+            failure.fixed_colour,
+            alpha_matching,
+            module.FROZEN_VERTEX_COLOURS,
+        )
+    )
+
+
+def test_independent_alpha_frontier_counts_exact_stage_partition() -> None:
+    audit = load_alpha_frontier_audit()
+    receipt = audit.build_receipt()
+
+    assert receipt["profile_count"] == 64
+    assert receipt["stage_partition"] == {
+        "admissible_for_edge_search": 95_500,
+        "nonperfect_terminal_coverage_prunes": 5_181_504,
+        "perfect_distinguished_hole_link_prunes": 116_500,
+        "perfect_forced_fan_conflict_prunes": 135_904,
+    }
+    totals = receipt["totals"]
+    assert totals["proper_partial_alpha_matchings"] == 5_529_408
+    assert totals["proper_perfect_alpha_matchings"] == 347_904
+    assert {row["proper_partial_alpha_matchings"] for row in receipt["profile_rows"]} == {86_397}
+    assert {row["proper_perfect_alpha_matchings"] for row in receipt["profile_rows"]} == {5_436}
+
+
+def test_all_partial_canary_ordinals_are_stable_within_frozen_profile() -> None:
+    module = load_script()
+    profiles = module.canonical_vertex_colour_profiles()
+    profile_index = profiles.index(module.FROZEN_VERTEX_COLOURS)
+    near_perfect = tuple(sorted({(0, 7), (1, 6), (2, 4), (3, 5), (10, 11)}))
+    cross_first = tuple(sorted({(0, 8), (1, 10), (2, 11), (3, 6), (4, 9), (5, 7)}))
+    local_ordinals: dict[tuple[tuple[int, int], ...], int] = {}
+    for ordinal, matching in enumerate(
+        module.alpha_matchings_for_scope("all-partial", module.FROZEN_VERTEX_COLOURS)
+    ):
+        canonical = tuple(sorted(matching))
+        if canonical in {near_perfect, cross_first}:
+            local_ordinals[canonical] = ordinal
+
+    assert profile_index == 36
+    assert local_ordinals[near_perfect] == 56_442
+    assert local_ordinals[cross_first] == 65_190
+    assert profile_index * 86_397 + local_ordinals[near_perfect] == 3_166_734
+    assert profile_index * 86_397 + local_ordinals[cross_first] == 3_175_482
 
 
 def test_pinned_one_work_unit_canary_ordinal_is_stable() -> None:
@@ -290,6 +370,35 @@ def test_bounded_and_interrupted_runs_never_write_completion(tmp_path: Path) -> 
     assert json.loads((interrupted_output / "checkpoint.json").read_text()) == interrupted
 
 
+def test_all_partial_scope_records_terminal_coverage_prune_before_edge_search(
+    tmp_path: Path,
+) -> None:
+    module = load_script()
+    output = tmp_path / "all-partial-bounded"
+    result = module.run_search(
+        module.SearchConfig(
+            output_dir=output,
+            profile_scope="canonical-fan",
+            alpha_scope="all-partial",
+            max_alpha_work_units=1,
+            checkpoint_interval=1,
+        )
+    )
+
+    assert result["status"] == "bounded_generation"
+    assert result["stop_reason"] == "max_alpha_work_units"
+    counts = result["counts"]
+    assert counts["alpha_matchings_assigned_to_shard"] == 1
+    assert counts["alpha_work_units_completed"] == 1
+    assert counts["alpha_nonperfect_terminal_coverage_prunes"] == 1
+    assert counts["alpha_perfect_work_units"] == 0
+    assert counts["alpha_admissible_for_edge_search"] == 0
+    assert counts["edge_colour_matchings_generated"] == 0
+    assert counts["candidate_states_emitted"] == 0
+    assert (output / "candidates.jsonl").read_bytes() == b""
+    assert not (output / "completion.json").exists()
+
+
 def test_output_directory_must_be_new_and_scope_limits_are_explicit(tmp_path: Path) -> None:
     module = load_script()
     existing = tmp_path / "existing"
@@ -308,6 +417,19 @@ def test_output_directory_must_be_new_and_scope_limits_are_explicit(tmp_path: Pa
             output_dir=tmp_path / "invalid-direct",
             profile_scope="canonical-fan",
             max_missing_profiles=1,
+        ).validate()
+    with pytest.raises(ValueError, match="all-partial alpha scope requires"):
+        module.SearchConfig(
+            output_dir=tmp_path / "invalid-all-partial-frozen",
+            profile_scope="frozen",
+            alpha_scope="all-partial",
+        ).validate()
+    with pytest.raises(ValueError, match="all-partial alpha scope requires"):
+        module.SearchConfig(
+            output_dir=tmp_path / "invalid-all-partial-missing-sizes",
+            profile_scope="canonical-fan",
+            alpha_scope="all-partial",
+            outside_missing_sizes=(2, 3),
         ).validate()
 
 

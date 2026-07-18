@@ -9,6 +9,14 @@ vertices, colours ``alpha,p_x,p_y,a_1,a_2,b_1,b_2 = 0,...,6``, and the four
 forced fan edges.  It then enumerates proper partial edge-colourings which
 block the two distinguished ``alpha`` paths for every non-alpha colour.
 
+The optional ``all-partial`` alpha scope starts from every proper partial
+alpha matching, rather than assuming alpha-perfectness.  A nonperfect alpha
+matching is rejected only after recording an uncovered fixed-colour terminal:
+the terminal cannot carry an edge of its own fixed colour, so either of the
+required blocked alternating paths can reach it only through an alpha edge.
+The remaining exact fan-conflict and distinguished-hole-link prunes are also
+recorded before the expensive non-alpha matching search.
+
 Two profile scopes are deliberately separate:
 
 * ``frozen`` reproduces the exact twelve-vertex regression which has eight
@@ -25,10 +33,12 @@ and only exhaustion of the configured input writes ``completion.json``.
 Records contain raw candidate states and proposed component swaps.  Neither a
 proposal nor failure to find one is independently certified here.
 
-The deterministic development canary ``--shard-count 347904 --shard-index
-199186 --outside-missing-sizes 2`` selects exactly one alpha matching (the
-post-terminal-lock regression's matching).  Exhausting that shard is complete
-for one alpha work unit only, never for the 347,904-unit canonical-fan input.
+The deterministic perfect-scope development canary ``--shard-count 347904
+--shard-index 199186 --outside-missing-sizes 2`` selects exactly one alpha
+matching (the post-terminal-lock regression's matching).  In ``all-partial``
+scope the corresponding cross-first regression has global ordinal 3,175,482
+in a 5,529,408-unit input.  Exhausting either singleton shard is complete for
+one alpha work unit only, never for its full canonical-fan input.
 """
 
 from __future__ import annotations
@@ -86,9 +96,10 @@ FROZEN_MISSING = (
     frozenset({1, 3}),
 )
 
-RUN_SCHEMA = "total-coloring.paired-hole-orbit-run.v1"
+RUN_SCHEMA = "total-coloring.paired-hole-orbit-run.v2"
 RECORD_SCHEMA = "total-coloring.paired-hole-orbit-candidate.v1"
 ProfileScope = Literal["frozen", "canonical-fan"]
+AlphaScope = Literal["perfect", "all-partial"]
 RunStatus = Literal[
     "running",
     "complete_generation",
@@ -236,6 +247,62 @@ def partial_matchings(
         remaining = vertices[1:index] + vertices[index + 1 :]
         for tail in partial_matchings(remaining, vertex_colours, forbidden_edges):
             yield (candidate, *tail)
+
+
+@dataclass(frozen=True, slots=True)
+class AlphaTerminalCoverageFailure:
+    """First fixed-colour terminal not incident with an alpha edge."""
+
+    terminal: int
+    fixed_colour: int
+    distinguished_holes: tuple[int, int]
+
+
+def alpha_terminal_coverage_failure(
+    alpha_matching: tuple[tuple[int, int], ...],
+    vertex_colours: tuple[int, ...],
+) -> AlphaTerminalCoverageFailure | None:
+    """Return the canonical obstruction to all twelve alpha blockages.
+
+    Every vertex in a canonical profile is one of the two fixed-colour
+    terminals for its non-alpha fixed colour.  An edge of that colour cannot
+    be incident with the vertex, so a nontrivial alpha--beta component can
+    reach it only on an alpha edge.  The configured distinguished holes are
+    never themselves beta terminals.  Consequently all twelve blockage arms
+    force every vertex to be alpha-covered.
+    """
+
+    covered = {vertex for candidate in alpha_matching for vertex in candidate}
+    for terminal, fixed_colour in enumerate(vertex_colours):
+        if terminal in covered:
+            continue
+        holes = DISTINGUISHED_HOLES.get(fixed_colour)
+        if holes is None:
+            raise ValueError("every fixed vertex colour must be a non-alpha role colour")
+        if terminal in holes:
+            raise ValueError("a distinguished hole cannot be its own fixed-colour terminal")
+        return AlphaTerminalCoverageFailure(
+            terminal=terminal,
+            fixed_colour=fixed_colour,
+            distinguished_holes=holes,
+        )
+    return None
+
+
+def alpha_matchings_for_scope(
+    alpha_scope: AlphaScope,
+    vertex_colours: tuple[int, ...],
+) -> Iterator[tuple[tuple[int, int], ...]]:
+    """Yield the configured alpha work-unit universe in stable order."""
+
+    vertices = tuple(range(ORDER))
+    if alpha_scope == "perfect":
+        yield from perfect_matchings(vertices, vertex_colours)
+        return
+    if alpha_scope == "all-partial":
+        yield from partial_matchings(vertices, vertex_colours, frozenset())
+        return
+    raise ValueError("unsupported alpha scope")
 
 
 def _missing_options(
@@ -1069,6 +1136,7 @@ def propose_release(
 class SearchConfig:
     output_dir: Path
     profile_scope: ProfileScope = "canonical-fan"
+    alpha_scope: AlphaScope = "perfect"
     outside_missing_sizes: tuple[int, ...] = (2,)
     shard_index: int = 0
     shard_count: int = 1
@@ -1083,6 +1151,8 @@ class SearchConfig:
     def validate(self) -> None:
         if self.profile_scope not in {"frozen", "canonical-fan"}:
             raise ValueError("unsupported profile scope")
+        if self.alpha_scope not in {"perfect", "all-partial"}:
+            raise ValueError("unsupported alpha scope")
         if self.shard_count <= 0 or not 0 <= self.shard_index < self.shard_count:
             raise ValueError("shard index must lie in [0, shard count)")
         if (
@@ -1093,6 +1163,12 @@ class SearchConfig:
             raise ValueError("outside missing sizes must be increasing values from 2,3,4,5")
         if self.profile_scope == "frozen" and self.outside_missing_sizes != (2,):
             raise ValueError("frozen scope requires --outside-missing-sizes 2")
+        if self.alpha_scope == "all-partial" and (
+            self.profile_scope != "canonical-fan" or self.outside_missing_sizes != (2,)
+        ):
+            raise ValueError(
+                "all-partial alpha scope requires the canonical-fan exact size-two cell"
+            )
         if self.profile_scope == "canonical-fan" and self.max_missing_profiles is not None:
             raise ValueError(
                 "--max-missing-profiles applies only to the explicit frozen-profile mode"
@@ -1112,6 +1188,7 @@ class SearchConfig:
 
     def semantic_dict(self) -> dict[str, object]:
         return {
+            "alpha_scope": self.alpha_scope,
             "checkpoint_interval": self.checkpoint_interval,
             "max_alpha_work_units": self.max_alpha_work_units,
             "max_candidate_states": self.max_candidate_states,
@@ -1132,6 +1209,11 @@ class RunCounts:
     alpha_matchings_seen: int = 0
     alpha_matchings_assigned_to_shard: int = 0
     alpha_work_units_completed: int = 0
+    alpha_nonperfect_terminal_coverage_prunes: int = 0
+    alpha_perfect_work_units: int = 0
+    alpha_forced_fan_conflict_prunes: int = 0
+    alpha_distinguished_hole_link_prunes: int = 0
+    alpha_admissible_for_edge_search: int = 0
     explicit_missing_profiles_seen: int = 0
     derived_missing_profile_occurrences: int = 0
     derived_distinct_missing_profiles_per_alpha_sum: int = 0
@@ -1282,6 +1364,15 @@ def _scope_metadata(config: SearchConfig) -> dict[str, object]:
             "p_y": 2,
         },
         "profile_scope": config.profile_scope,
+        "alpha_scope": config.alpha_scope,
+        "alpha_scope_note": (
+            "proper perfect alpha matchings"
+            if config.alpha_scope == "perfect"
+            else (
+                "every proper partial alpha matching; nonperfect units are pruned by an "
+                "explicit uncovered fixed-colour terminal before non-alpha generation"
+            )
+        ),
         "profile_scope_note": (
             "exact frozen vertex and missing profile"
             if config.profile_scope == "frozen"
@@ -1304,11 +1395,25 @@ def _scope_metadata(config: SearchConfig) -> dict[str, object]:
             )
         ),
         "upstream_cardinality": {
-            "alpha_matchings_per_vertex_profile": 5436,
+            "alpha_matchings_per_vertex_profile": (
+                5436 if config.alpha_scope == "perfect" else 86_397
+            ),
             "alpha_work_units_before_sharding": (
-                5436 if config.profile_scope == "frozen" else 347_904
+                5436
+                if config.profile_scope == "frozen"
+                else (347_904 if config.alpha_scope == "perfect" else 5_529_408)
             ),
             "vertex_colour_profiles": 1 if config.profile_scope == "frozen" else 64,
+            "all_partial_exact_partition": (
+                None
+                if config.alpha_scope == "perfect"
+                else {
+                    "nonperfect_terminal_coverage_prunes": 5_181_504,
+                    "perfect_forced_fan_conflict_prunes": 135_904,
+                    "perfect_distinguished_hole_link_prunes": 116_500,
+                    "admissible_for_edge_search": 95_500,
+                }
+            ),
         },
         "sharding_unit": "global deterministic alpha-matching ordinal",
     }
@@ -1508,13 +1613,24 @@ def run_search(
         }
 
     with records_path.open("xb") as records:
+
+        def finish_alpha_work_unit() -> None:
+            counts.alpha_work_units_completed += 1
+            if counts.alpha_work_units_completed % config.checkpoint_interval == 0:
+                records.flush()
+                os.fsync(records.fileno())
+                atomic_json_write(
+                    config.output_dir / "checkpoint.json",
+                    checkpoint_payload("running", "periodic_checkpoint"),
+                )
+
         try:
             for vertex_profile_index, vertex_colours in enumerate(
                 _profiles_for_scope(config.profile_scope)
             ):
                 counts.vertex_colour_profiles_seen += 1
                 for alpha_profile_ordinal, alpha_matching in enumerate(
-                    perfect_matchings(tuple(range(ORDER)), vertex_colours)
+                    alpha_matchings_for_scope(config.alpha_scope, vertex_colours)
                 ):
                     counts.alpha_matchings_seen += 1
                     current_global_ordinal = alpha_global_ordinal
@@ -1529,6 +1645,30 @@ def run_search(
                     ):
                         raise _BoundedStop("max_alpha_work_units")
                     counts.alpha_matchings_assigned_to_shard += 1
+
+                    coverage_failure = alpha_terminal_coverage_failure(
+                        alpha_matching,
+                        vertex_colours,
+                    )
+                    if coverage_failure is not None:
+                        if config.alpha_scope != "all-partial":
+                            raise RuntimeError("perfect alpha scope produced an uncovered terminal")
+                        counts.alpha_nonperfect_terminal_coverage_prunes += 1
+                        finish_alpha_work_unit()
+                        continue
+
+                    counts.alpha_perfect_work_units += 1
+                    if config.alpha_scope == "all-partial":
+                        alpha_edges = frozenset(alpha_matching)
+                        if alpha_edges & frozenset(FAN_EDGES.values()):
+                            counts.alpha_forced_fan_conflict_prunes += 1
+                            finish_alpha_work_unit()
+                            continue
+                        if alpha_edges & frozenset(DISTINGUISHED_HOLES.values()):
+                            counts.alpha_distinguished_hole_link_prunes += 1
+                            finish_alpha_work_unit()
+                            continue
+                    counts.alpha_admissible_for_edge_search += 1
                     derived_profiles: set[str] = set()
 
                     def emit_state(
@@ -1725,14 +1865,7 @@ def run_search(
                         counts.derived_distinct_missing_profiles_per_alpha_sum += len(
                             derived_profiles
                         )
-                    counts.alpha_work_units_completed += 1
-                    if counts.alpha_work_units_completed % config.checkpoint_interval == 0:
-                        records.flush()
-                        os.fsync(records.fileno())
-                        atomic_json_write(
-                            config.output_dir / "checkpoint.json",
-                            checkpoint_payload("running", "periodic_checkpoint"),
-                        )
+                    finish_alpha_work_unit()
         except _BoundedStop as stop:
             status = "bounded_generation"
             stop_reason = stop.reason
@@ -1771,6 +1904,11 @@ def parse_arguments(argv: Sequence[str] | None = None) -> argparse.Namespace:
         choices=("frozen", "canonical-fan"),
         default="canonical-fan",
     )
+    parser.add_argument(
+        "--alpha-scope",
+        choices=("perfect", "all-partial"),
+        default="perfect",
+    )
     parser.add_argument("--outside-missing-sizes", type=_parse_sizes, default=(2,))
     parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--shard-count", type=int, default=1)
@@ -1797,6 +1935,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     config = SearchConfig(
         output_dir=arguments.output_dir,
         profile_scope=arguments.profile_scope,
+        alpha_scope=arguments.alpha_scope,
         outside_missing_sizes=arguments.outside_missing_sizes,
         shard_index=arguments.shard_index,
         shard_count=arguments.shard_count,

@@ -7,6 +7,9 @@ All notable changes are documented here. The project follows
 
 ### Added
 
+- Add an explicit all-partial-alpha paired-hole campaign scope, a generic
+  fixed-colour terminal-coverage reduction deriving alpha-perfectness, and an
+  independent bit-mask audit of the exact 5,529,408-unit frontier.
 - Add a sharded matching-core fixed-precoloring falsification harness with
   canonical size-at-most-two color-class representatives, a two-sided
   degree envelope, independent total-coloring certificate verification,
