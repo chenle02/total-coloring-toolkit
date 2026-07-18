@@ -91,6 +91,36 @@ def test_pinned_cross_first_canary_ordinal_is_stable() -> None:
     assert profile_index * 5_436 + alpha_profile_ordinal == 199_238
 
 
+def test_configured_orbit_includes_every_role_pair_after_stable_prefix() -> None:
+    module = load_script()
+    preferred = tuple((module.ALPHA, beta) for beta in module.NON_ALPHA) + tuple(
+        (a, b) for a in (3, 4) for b in (5, 6)
+    )
+    configured = module.configured_first_move_pairs()
+
+    assert configured[: len(preferred)] == preferred
+    assert set(configured) == set(module.combinations(module.PALETTE, 2))
+    assert (1, 3) in configured
+    assert (2, 6) in configured
+    assert module.historical_move_pairs() == preferred
+
+
+def test_vertex_hole_first_pattern_is_classified_explicitly() -> None:
+    module = load_script()
+    proposal = module.OrbitProposal(
+        status="proposed_release",
+        explored_states=3,
+        depth=2,
+        common_missing_colour=6,
+        moves=(
+            module.OrbitMove(colours=(1, 3), component_edges=(), component_walk=()),
+            module.OrbitMove(colours=(3, 6), component_edges=(), component_walk=()),
+        ),
+    )
+
+    assert module.orbit_pattern(proposal) == ("vertex_hole_role_then_cross_two_swap_release")
+
+
 def test_frozen_missing_profile_and_parity_enumerator_are_exact() -> None:
     module = load_script()
     frozen = tuple(

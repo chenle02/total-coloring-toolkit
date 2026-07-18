@@ -103,6 +103,22 @@ def edge(left: int, right: int) -> tuple[int, int]:
     return (left, right) if left < right else (right, left)
 
 
+def historical_move_pairs() -> tuple[tuple[int, int], ...]:
+    """Return the alpha-role and A-by-B pairs used before this wave."""
+
+    return tuple((ALPHA, beta) for beta in NON_ALPHA) + tuple(
+        (a, b) for a in (3, 4) for b in (5, 6)
+    )
+
+
+def configured_first_move_pairs() -> tuple[tuple[int, int], ...]:
+    """Return every role pair after the historical stable prefix."""
+
+    preferred = historical_move_pairs()
+    preferred_set = set(preferred)
+    return preferred + tuple(pair for pair in combinations(PALETTE, 2) if pair not in preferred_set)
+
+
 def canonical_json_payload_bytes(value: object) -> bytes:
     """Encode canonical semantic JSON without transport whitespace."""
 
@@ -982,9 +998,8 @@ def propose_release(
             dict(zip(edges, colours, strict=True)),
         )
 
-    move_pairs = tuple((ALPHA, beta) for beta in NON_ALPHA) + tuple(
-        (a, b) for a in (3, 4) for b in (5, 6)
-    )
+    first_move_pairs = configured_first_move_pairs()
+    later_move_pairs = historical_move_pairs()
     queue = deque([initial_colours])
     depth = {initial_colours: 0}
     parent: dict[tuple[int, ...], tuple[tuple[int, ...], OrbitMove]] = {}
@@ -1013,6 +1028,7 @@ def propose_release(
         if current_depth == max_depth:
             depth_truncated = True
             continue
+        move_pairs = first_move_pairs if current_depth == 0 else later_move_pairs
         for first, second in move_pairs:
             for component_indices in _state_components(edges, colours, first, second):
                 target = list(colours)
@@ -1139,6 +1155,7 @@ class RunCounts:
     hard_alpha_hole_role_then_cross_two_swap_release: int = 0
     hard_alpha_vertex_role_then_cross_two_swap_release: int = 0
     hard_cross_role_then_cross_two_swap_release: int = 0
+    hard_vertex_hole_role_then_cross_two_swap_release: int = 0
     hard_other_or_unresolved_bounded_orbit: int = 0
     proposed_releases: int = 0
     orbit_depth_bounds: int = 0
@@ -1186,6 +1203,9 @@ def orbit_pattern(proposal: OrbitProposal) -> str:
     first_is_cross = bool(first_set & {3, 4}) and bool(first_set & {5, 6})
     if first_is_cross and second_is_cross:
         return "cross_role_then_cross_two_swap_release"
+    first_is_vertex_hole = len(first_set & {1, 2}) == 1 and len(first_set & {3, 4, 5, 6}) == 1
+    if first_is_vertex_hole and second_is_cross:
+        return "vertex_hole_role_then_cross_two_swap_release"
     return "other_two_swap_release"
 
 
@@ -1600,6 +1620,8 @@ def run_search(
                                 counts.hard_alpha_vertex_role_then_cross_two_swap_release += 1
                             elif pattern == "cross_role_then_cross_two_swap_release":
                                 counts.hard_cross_role_then_cross_two_swap_release += 1
+                            elif pattern == "vertex_hole_role_then_cross_two_swap_release":
+                                counts.hard_vertex_hole_role_then_cross_two_swap_release += 1
                             else:
                                 counts.hard_other_or_unresolved_bounded_orbit += 1
                             topology_by_colours = {

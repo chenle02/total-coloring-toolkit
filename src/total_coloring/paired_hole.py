@@ -19,6 +19,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from itertools import combinations
 from typing import Final, cast
 
 from total_coloring.certificates import TotalColoringCertificate
@@ -1616,10 +1617,12 @@ def _derive_two_swap_orbit_exit(
 ) -> TwoSwapOrbitExit | None:
     """Search the exact bounded two-move orbit relevant to the residue.
 
-    The first move ranges over every full alpha-role-color or A x B component
-    in the graph; restricting it to alpha components would miss a cross-cross
-    detachment, while restricting it to the six fan-role vertices would miss
-    an outside component that intersects and detaches a linked cross path.
+    The first move ranges over every full two-role-color component in the
+    graph.  Restricting it to alpha components would miss a cross-cross
+    detachment, restricting it to alpha and A x B pairs would miss a
+    vertex-role--hole-role detachment, and restricting it to the six fan-role
+    vertices would miss an outside component that intersects and detaches a
+    linked cross path.
     The second is a full A x B component meeting x or y.  The retained
     bounded orbit requires the two moves to share exactly one role color;
     other two-move patterns remain outside this verifier's documented scope.
@@ -1642,7 +1645,13 @@ def _derive_two_swap_orbit_exit(
         )
     )
     cross_pairs = tuple((a, b) for a in a_set for b in b_set)
-    first_pairs = tuple((state.alpha, beta) for beta in role_colors) + cross_pairs
+    preferred_first_pairs = (
+        tuple((state.alpha, beta) for beta in role_colors if beta != state.alpha) + cross_pairs
+    )
+    preferred_first_pair_set = set(preferred_first_pairs)
+    first_pairs = preferred_first_pairs + tuple(
+        pair for pair in combinations(role_colors, 2) if pair not in preferred_first_pair_set
+    )
     for first, second in first_pairs:
         for first_component in _unique_components_meeting(
             state,

@@ -16,6 +16,12 @@ All notable changes are documented here. The project follows
   alpha-beta blockages, terminal releases, linked/distinct cross topology, and
   independently certified one- and two-component Kempe exits.
 
+### Changed
+
+- Expand the first step of the paired-hole two-swap orbit from alpha-role and
+  A-by-B pairs to every pair of the seven normalized role colors, including
+  the vertex-role--hole-role detachments exposed by the ambient F0 audit.
+
 ## [0.3.0] - 2026-07-14
 
 ### Changed

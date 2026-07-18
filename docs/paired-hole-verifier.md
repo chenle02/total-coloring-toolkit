@@ -52,9 +52,9 @@ receipt = verify_paired_hole_state(state)
   hole, and a valid fill certificate.
 - `verified_two_swap_orbit_exit`: no direct cross exit was found, but the
   bounded role-color orbit contains two legal full-component swaps followed by
-  a certificate-verified fill. The first move may be an `alpha`--role swap or
-  an `A x B` cross swap and is recomputed from the raw state over every graph
-  component (including components disjoint from the six named fan vertices).
+  a certificate-verified fill. The first move may use any pair of the seven
+  role colors and is recomputed from the raw state over every graph component
+  (including components disjoint from the six named fan vertices).
   The second `A x B` component is recomputed from the verified intermediate
   coloring. This documented two-move verifier orbit requires the two move
   pairs to share exactly one role color; it does not advertise negative
