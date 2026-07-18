@@ -176,7 +176,7 @@ def test_order_six_cyclic_fan_state_is_extendable() -> None:
     assert module.independent_witness_issues(graph, 6, vertex_colours, assignment) == ()
 
 
-def test_fully_blocked_two_sided_order_twelve_state_unlocks() -> None:
+def test_alpha_blocked_two_sided_order_twelve_state_has_cross_colour_repair() -> None:
     module = load_script()
     # Labels: x,y,u,v,w,z,P,Q,A,B,C,D.
     vertex_colours = (1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6)
@@ -247,18 +247,17 @@ def test_fully_blocked_two_sided_order_twelve_state_unlocks() -> None:
 
     completed_edge_colours = dict(initial_edge_colours)
 
-    def swap_path(path: tuple[int, ...], beta: int) -> None:
+    def swap_path(path: tuple[int, ...], first: int, second: int) -> None:
         for left, right in pairwise(path):
             edge = (min(left, right), max(left, right))
             colour = completed_edge_colours[edge]
-            assert colour in {0, beta}
-            completed_edge_colours[edge] = beta if colour == 0 else 0
+            assert colour in {first, second}
+            completed_edge_colours[edge] = second if colour == first else first
 
-    swap_path((11, 4, 5, 10), 1)
-    swap_path((9, 2, 3, 8), 2)
-    swap_path((0, 7, 8), 4)
-    swap_path((1, 6, 10), 6)
-    completed_edge_colours[(0, 1)] = 0
+    # Although all twelve displayed alpha-beta paths are blocked, a cross-colour
+    # Kempe swap frees colour 6 at x, whereupon 6 is missing at both x and y.
+    swap_path((0, 3, 7), 6, 3)
+    completed_edge_colours[(0, 1)] = 6
     assignment = vertex_colours + tuple(completed_edge_colours[edge] for edge in graph.edges)
     assert module.independent_witness_issues(graph, 7, vertex_colours, assignment) == ()
 
