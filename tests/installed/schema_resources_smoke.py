@@ -20,6 +20,7 @@ EXPECTED_NAMES = (
     "d8-dependency-pivot-audit-v1.schema.json",
     "dataset-manifest-v2.schema.json",
     "graph-v1.schema.json",
+    "paired-hole-state-v1.schema.json",
     "total-coloring-certificate-v1.schema.json",
     "universal-census-completion-v1.schema.json",
     "universal-census-manifest-v1.schema.json",

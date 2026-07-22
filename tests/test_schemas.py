@@ -13,6 +13,7 @@ from total_coloring.schema_resources import read_schema_json
     [
         "d8-dependency-pivot-audit-v1.schema.json",
         "graph-v1.schema.json",
+        "paired-hole-state-v1.schema.json",
         "total-coloring-certificate-v1.schema.json",
     ],
 )

@@ -17,6 +17,8 @@ counterexample when another partition remains untested.
 - deterministic exact coloring through a dependency-free DSATUR backend;
 - an independent static-order, no-symmetry audit backend for differential checks;
 - independently checked total-coloring certificates;
+- a fail-closed semantic verifier for exact paired-hole partial states,
+  including reconstructed fan/blockage topology and verified Kempe exits;
 - high-degree equitable partitions via complement matchings;
 - auxiliary-graph construction, rainbow extension, and decoding;
 - streamed `nauty-geng` enumeration with reproducible sharding;
@@ -237,7 +239,9 @@ See [the mathematical specification](docs/mathematical-specification.md),
 [architecture](docs/architecture.md), and
 [reproducibility policy](docs/reproducibility.md). The
 [research-target audit](docs/research-target.md) records the exact reduction,
-current conjectural extension statements, and corrected proof obligations.
+current conjectural extension statements, and corrected proof obligations. The
+[paired-hole verifier contract](docs/paired-hole-verifier.md) documents the
+strict generator interface and the non-theorem meaning of every status.
 
 ## Schema resources
 
@@ -250,6 +254,8 @@ from total_coloring.schema_resources import SchemaName, read_schema_json, schema
 
 assert SchemaName.GRAPH_V1 in schema_names()
 graph_schema = read_schema_json(SchemaName.GRAPH_V1)
+
+paired_state_schema = read_schema_json(SchemaName.PAIRED_HOLE_STATE_V1)
 ```
 
 Only names in `SchemaName` are accepted. The repository-level `schemas/` tree
