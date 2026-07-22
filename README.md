@@ -26,6 +26,8 @@ counterexample when another partition remains untested.
   schemas and SHA-256 provenance;
 - wheel-installed access to every versioned JSON schema through a typed,
   traversal-safe resource API;
+- a deterministic, independently reconstructed m=6 protected-transfer CEGAR
+  campaign with resumable cuts and dual-checker LRAT receipts;
 - explicit finite audits of algebraic proof obligations;
 - an exact C++20 root-pivot auditor for the seven residual `D = 8` dependency
   profiles, differentially checked by an independent Python model.
@@ -239,13 +241,16 @@ See [the mathematical specification](docs/mathematical-specification.md),
 [architecture](docs/architecture.md), and
 [reproducibility policy](docs/reproducibility.md). The
 [research-target audit](docs/research-target.md) records the exact reduction,
-current conjectural extension statements, and corrected proof obligations. The
-[paired-hole verifier contract](docs/paired-hole-verifier.md) documents the
+current conjectural extension statements, and corrected proof obligations.
+The [m=6 protected-transfer guide](docs/m6-protected-transfer.md) documents the
+separate bounded proof-search formula, resume semantics, and LRAT trust
+boundary.
+The [paired-hole verifier contract](docs/paired-hole-verifier.md) documents the
 strict generator interface and the non-theorem meaning of every status.
 
 ## Schema resources
 
-The eleven public JSON schemas are part of both the source distribution and the
+The twelve public JSON schemas are part of both the source distribution and the
 wheel. Applications should use the typed API instead of assuming a repository
 layout:
 

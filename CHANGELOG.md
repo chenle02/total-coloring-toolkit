@@ -7,6 +7,11 @@ All notable changes are documented here. The project follows
 
 ### Added
 
+- Integrate the deterministic m=6 Type-I I.3+3 kernel and resumable protected
+  `q=1`/`q=3` CEGAR campaign with exact independent CNF/model reconstruction,
+  explicit hash-pinned solver and LRAT tools, and dual-checker proof receipts.
+- Add reusable detached-authority, explicit clean-environment Slurm identity,
+  and terminal `sacct` reconciliation helpers for Easley wrappers.
 - Add a documented, dependency-free C++20 auditor for seven exact `D = 8`
   dependency/root-pivot profiles, with deterministic versioned JSON receipts,
   a public schema and golden fixture, an independent Python reference model,
