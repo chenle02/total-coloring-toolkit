@@ -38,9 +38,25 @@ records and scheduler logs stay outside Git under one isolated scratch root.
   explicit.
 - Never use `rsync --delete` against a live campaign. Sync back only after
   `status/exact-union-complete.json` exists and has been reviewed.
+- For detached canaries that cross a container `--cleanenv` boundary, expand
+  the host values of `SLURM_JOB_ID` and `SLURMD_NODENAME` into explicit
+  `--job-id` and `--node` arguments before entering the container. Never ask
+  the in-container collector to rediscover those environment variables.
+- Treat an in-allocation PASS as provisional. Validate its detached authority
+  digest and explicit job/node binding, then require a hash-pinned `sacct`
+  query to report exactly one root row with `COMPLETED`, `0:0`, and the same
+  node. Absence from `squeue` is not terminal evidence.
 - The completion marker validates an exact finite computation. It is not an
   unbounded total-coloring theorem and does not authorize the release-v1
   exporter, which still requires an unsharded run.
+
+The generic helpers in `scripts.easley.authority` implement this detached
+authority and reconciliation boundary. A host wrapper should construct
+`SlurmAllocationIdentity` before `--cleanenv`, append its
+`cleanenv_arguments()` to the container command, validate the resulting
+provisional allocation receipt, and call `query_sacct` with an explicit
+`PinnedExecutable(path, sha256)` after the job leaves the queue. The helpers
+do not submit or cancel jobs and never inspect `squeue`.
 
 ## Job graph
 

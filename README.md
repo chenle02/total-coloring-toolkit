@@ -24,6 +24,8 @@ counterexample when another partition remains untested.
   schemas and SHA-256 provenance;
 - wheel-installed access to every versioned JSON schema through a typed,
   traversal-safe resource API;
+- a deterministic, independently reconstructed m=6 protected-transfer CEGAR
+  campaign with resumable cuts and dual-checker LRAT receipts;
 - explicit finite audits of algebraic proof obligations.
 
 Solver success is computational evidence, not a theorem. Exhaustive claims
@@ -220,6 +222,9 @@ See [the mathematical specification](docs/mathematical-specification.md),
 [reproducibility policy](docs/reproducibility.md). The
 [research-target audit](docs/research-target.md) records the exact reduction,
 current conjectural extension statements, and corrected proof obligations.
+The [m=6 protected-transfer guide](docs/m6-protected-transfer.md) documents the
+separate bounded proof-search formula, resume semantics, and LRAT trust
+boundary.
 
 ## Schema resources
 

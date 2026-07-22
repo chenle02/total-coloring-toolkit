@@ -5,6 +5,14 @@ All notable changes are documented here. The project follows
 
 ## [Unreleased]
 
+### Added
+
+- Integrate the deterministic m=6 Type-I I.3+3 kernel and resumable protected
+  `q=1`/`q=3` CEGAR campaign with exact independent CNF/model reconstruction,
+  explicit hash-pinned solver and LRAT tools, and dual-checker proof receipts.
+- Add reusable detached-authority, explicit clean-environment Slurm identity,
+  and terminal `sacct` reconciliation helpers for Easley wrappers.
+
 ## [0.3.0] - 2026-07-14
 
 ### Changed
