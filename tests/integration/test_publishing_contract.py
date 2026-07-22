@@ -56,8 +56,14 @@ def _candidate_from_actual_scaffold(tmp_path: Path) -> tuple[Path, dict[str, Any
         source,
         ignore=shutil.ignore_patterns(".git", ".mypy_cache", ".ruff_cache", "__pycache__", "*.pyc"),
     )
-    for placeholder in (source / "reports/.gitkeep", source / "results/.gitkeep"):
-        placeholder.unlink(missing_ok=True)
+    # Keep the real verifier and schema scaffold, but replace its managed
+    # release payload with this test's single-artifact candidate.  The public
+    # data repository is no longer an empty scaffold, so deleting only the old
+    # .gitkeep placeholders leaves released files that are intentionally absent
+    # from the fixture manifest and makes the verifier reject the fixture.
+    for managed_root in (source / "reports", source / "results"):
+        shutil.rmtree(managed_root)
+        managed_root.mkdir()
 
     result = source / "results/cross-verifier.json"
     payload: dict[str, Any] = {
@@ -96,6 +102,7 @@ def _candidate_from_actual_scaffold(tmp_path: Path) -> tuple[Path, dict[str, Any
             "description": "Cross-verifier contract fixture.",
         }
     ]
+    manifest["external_artifacts"] = []
     _write_json(manifest_path, manifest)
     (source / "SHA256SUMS").write_text(f"{digest}  results/cross-verifier.json\n", encoding="utf-8")
     return source, payload
