@@ -9,7 +9,12 @@ from total_coloring.schema_resources import read_schema_json
 
 
 @pytest.mark.parametrize(
-    "name", ["graph-v1.schema.json", "total-coloring-certificate-v1.schema.json"]
+    "name",
+    [
+        "d8-dependency-pivot-audit-v1.schema.json",
+        "graph-v1.schema.json",
+        "total-coloring-certificate-v1.schema.json",
+    ],
 )
 def test_schema_itself_is_valid(name: str) -> None:
     Draft202012Validator.check_schema(read_schema_json(name))

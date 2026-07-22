@@ -67,6 +67,31 @@ Artifact parsing bounds each canonical JSONL graph record at 16 MiB before
 decoding. This is far above order-eight transcript sizes while preventing an
 untrusted output directory from forcing an unbounded line allocation.
 
+## Finite dependency-audit receipts
+
+The standalone `D = 8` auditor emits deterministic JSON under
+`d8-dependency-pivot-audit-v1.schema.json`. A reproducible receipt records the
+auditor and semantics versions, the exact normalized profile descriptors, all
+pre-filter and post-filter counts, the minimum root-pivot depth histogram, and
+explicit mathematical limitations. It excludes timing, host, compiler, and
+path metadata from the scientific bytes.
+
+The complete-suite receipt is checked in only as the tiny reviewed fixture
+`tests/fixtures/d8-dependency-counts-v1.json`. Tests rebuild the C++20 source
+with strict warnings and independently regenerate the mathematics in Python.
+Changing a count is therefore not an ordinary snapshot update: it requires an
+explained semantic change, agreement of both implementations, the appropriate
+semantics/schema version decision, and review of the associated proof claim.
+The package gate also compiles and replays the native source from the unpacked
+sdist itself, then compares the output byte-for-byte with the fixture packaged
+beside it.
+
+`complete: true` means all role-labelled states in the listed finite profiles
+were visited. It says nothing about physical graph realization,
+alternating-component safety, or the still-open extension theorem. The source
+distribution carries the C++ and Python audit sources; the wheel does not
+install the native auditor.
+
 ## Universal release preparation
 
 Public release preparation reconstructs each completed run configuration from

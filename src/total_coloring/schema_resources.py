@@ -23,6 +23,7 @@ class SchemaName(StrEnum):
     CENSUS_COMPLETION_V1 = "census-completion-v1.schema.json"
     CENSUS_MANIFEST_V1 = "census-manifest-v1.schema.json"
     CENSUS_RECORD_V1 = "census-record-v1.schema.json"
+    D8_DEPENDENCY_PIVOT_AUDIT_V1 = "d8-dependency-pivot-audit-v1.schema.json"
     DATASET_MANIFEST_V2 = "dataset-manifest-v2.schema.json"
     GRAPH_V1 = "graph-v1.schema.json"
     TOTAL_COLORING_CERTIFICATE_V1 = "total-coloring-certificate-v1.schema.json"
