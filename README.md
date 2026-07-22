@@ -17,6 +17,8 @@ counterexample when another partition remains untested.
 - deterministic exact coloring through a dependency-free DSATUR backend;
 - an independent static-order, no-symmetry audit backend for differential checks;
 - independently checked total-coloring certificates;
+- a fail-closed semantic verifier for exact paired-hole partial states,
+  including reconstructed fan/blockage topology and verified Kempe exits;
 - high-degree equitable partitions via complement matchings;
 - auxiliary-graph construction, rainbow extension, and decoding;
 - streamed `nauty-geng` enumeration with reproducible sharding;
@@ -26,7 +28,9 @@ counterexample when another partition remains untested.
   traversal-safe resource API;
 - a deterministic, independently reconstructed m=6 protected-transfer CEGAR
   campaign with resumable cuts and dual-checker LRAT receipts;
-- explicit finite audits of algebraic proof obligations.
+- explicit finite audits of algebraic proof obligations;
+- an exact C++20 root-pivot auditor for the seven residual `D = 8` dependency
+  profiles, differentially checked by an independent Python model.
 
 Solver success is computational evidence, not a theorem. Exhaustive claims
 must state the generator, filters, shard coverage, software version, and
@@ -212,10 +216,26 @@ Audit the draft's smallest `c=2`, `P=Q=1` arithmetic case:
 total-coloring proof-audit --repeated 1 --singletons 1 --cap 2
 ```
 
-Commands emit canonical JSON. Exit code `0` means a verified witness or valid
-certificate, `1` means a candidate negative/invalid certificate, `2` means an
-operational error, and `3` means the search was incomplete. A candidate
-negative is never presented as a proved UNSAT result.
+The separate publication auditor for the finite `D = 8` dependency frontier
+is shipped in the source distribution. It enumerates exact role-labelled
+incidence states and root-pivot orbits; it does not claim graph realizability
+or prove the remaining coloring lemma:
+
+```bash
+c++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror \
+  auditors/d8_dependency_audit.cpp -o d8_dependency_audit
+./d8_dependency_audit --suite
+```
+
+See the [mathematical model, build instructions, receipt fields, independent
+reference implementation, and trust boundary](docs/d8-dependency-audit.md).
+
+The installed `total-coloring` commands emit canonical JSON. Exit code `0`
+means a verified witness or valid certificate, `1` means a candidate
+negative/invalid certificate, `2` means an operational error, and `3` means
+the search was incomplete. A candidate negative is never presented as a
+proved UNSAT result. The standalone auditor's smaller CLI contract is
+documented separately at the link above.
 
 See [the mathematical specification](docs/mathematical-specification.md),
 [architecture](docs/architecture.md), and
@@ -225,10 +245,12 @@ current conjectural extension statements, and corrected proof obligations.
 The [m=6 protected-transfer guide](docs/m6-protected-transfer.md) documents the
 separate bounded proof-search formula, resume semantics, and LRAT trust
 boundary.
+The [paired-hole verifier contract](docs/paired-hole-verifier.md) documents the
+strict generator interface and the non-theorem meaning of every status.
 
 ## Schema resources
 
-The ten public JSON schemas are part of both the source distribution and the
+The twelve public JSON schemas are part of both the source distribution and the
 wheel. Applications should use the typed API instead of assuming a repository
 layout:
 
@@ -237,6 +259,8 @@ from total_coloring.schema_resources import SchemaName, read_schema_json, schema
 
 assert SchemaName.GRAPH_V1 in schema_names()
 graph_schema = read_schema_json(SchemaName.GRAPH_V1)
+
+paired_state_schema = read_schema_json(SchemaName.PAIRED_HOLE_STATE_V1)
 ```
 
 Only names in `SchemaName` are accepted. The repository-level `schemas/` tree
