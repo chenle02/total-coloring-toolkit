@@ -11,6 +11,10 @@ All notable changes are documented here. The project follows
   canonical size-at-most-two color-class representatives, a two-sided
   degree envelope, independent total-coloring certificate verification,
   explicit bounded-run receipts, and order-six/order-ten regression witnesses.
+- Add a canonical paired-hole raw-state schema and dependency-free semantic
+  verifier that reconstructs both zero-surplus fan closures, all twelve
+  alpha-beta blockages, terminal releases, linked/distinct cross topology, and
+  independently certified one- and two-component Kempe exits.
 
 ## [0.3.0] - 2026-07-14
 

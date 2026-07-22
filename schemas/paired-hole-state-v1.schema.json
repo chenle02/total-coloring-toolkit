@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/chenle02/total-coloring-toolkit/main/schemas/paired-hole-state-v1.schema.json",
+  "title": "Exact paired-hole partial total-coloring state",
+  "description": "A numbered graph and one-hole partial total coloring. Role fields are untrusted pointers; semantic verification independently reconstructs fan closures, missing sets, alternating components, swaps, and any completed certificate.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "graph",
+    "degree_parameter",
+    "palette_size",
+    "vertex_colors",
+    "edge_colors",
+    "uncolored_edge",
+    "alpha",
+    "roles"
+  ],
+  "properties": {
+    "schema_version": {"const": "total-coloring.paired-hole-state.v1"},
+    "kind": {"const": "paired-hole-partial-total-coloring"},
+    "graph": {"$ref": "#/$defs/graph"},
+    "degree_parameter": {"type": "integer", "minimum": 0},
+    "palette_size": {"type": "integer", "minimum": 0},
+    "vertex_colors": {
+      "type": "array",
+      "items": {"type": "integer", "minimum": 0}
+    },
+    "edge_colors": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {"type": "integer", "minimum": 0},
+          {"type": "null"}
+        ]
+      }
+    },
+    "uncolored_edge": {"$ref": "#/$defs/edge"},
+    "alpha": {"type": "integer", "minimum": 0},
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "x_fan_satellites", "y_fan_satellites"],
+      "properties": {
+        "x": {"type": "integer", "minimum": 0},
+        "y": {"type": "integer", "minimum": 0},
+        "x_fan_satellites": {"$ref": "#/$defs/vertexPair"},
+        "y_fan_satellites": {"$ref": "#/$defs/vertexPair"}
+      }
+    }
+  },
+  "$defs": {
+    "edge": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 0}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "vertexPair": {
+      "type": "array",
+      "prefixItems": [
+        {"type": "integer", "minimum": 0},
+        {"type": "integer", "minimum": 0}
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "graph": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "order", "edges"],
+      "properties": {
+        "schema_version": {"const": "total-coloring.simple-graph.v1"},
+        "order": {"type": "integer", "minimum": 0},
+        "edges": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/edge"}
+        }
+      }
+    }
+  }
+}
