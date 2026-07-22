@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chenle02/total-coloring-toolkit/schemas/d8-dependency-pivot-audit-v1.schema.json",
+  "title": "D=8 dependency root-pivot audit receipt v1",
+  "description": "Complete deterministic counts for one or more built-in role-labelled D=8 dependency profiles. Completeness is limited to the abstract incidence/root-pivot model named by semantics_version.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "auditor_version",
+    "semantics_version",
+    "complete",
+    "limitations",
+    "profiles"
+  ],
+  "properties": {
+    "kind": {
+      "const": "d8_dependency_pivot_audit",
+      "description": "Artifact discriminator."
+    },
+    "schema_version": {
+      "const": 1,
+      "description": "Public JSON structure version."
+    },
+    "auditor_version": {
+      "type": "string",
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic-versioned native auditor release within the v1 executable contract."
+    },
+    "semantics_version": {
+      "const": "exact-incidence-root-pivot-v1",
+      "description": "Version of the enumerated state universe, filters, robustness predicate, and pivot transition."
+    },
+    "complete": {
+      "const": true,
+      "description": "Every role-labelled state in each listed profile was exhausted; this is not a theorem-completeness claim."
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Claim-boundary statements carried with every receipt.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "description": "Audited profiles in deterministic built-in order.",
+      "items": {
+        "$ref": "#/$defs/profile"
+      }
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile_id",
+        "vertex_count",
+        "active_indegrees",
+        "mobile_triple_columns",
+        "inert_multiplicity",
+        "counts"
+      ],
+      "allOf": [
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-a-w5"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 5},
+              "active_indegrees": {"const": [3, 2, 2, 2]},
+              "mobile_triple_columns": {"const": [0]},
+              "inert_multiplicity": {"const": 2}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-b-w6"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 6},
+              "active_indegrees": {"const": [3, 3, 2, 2, 1]},
+              "mobile_triple_columns": {"const": [0, 1]},
+              "inert_multiplicity": {"const": 2}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-c-frozen-w5"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 5},
+              "active_indegrees": {"const": [3, 3, 1, 1]},
+              "mobile_triple_columns": {"const": [0, 1]},
+              "inert_multiplicity": {"const": 3}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-c-frozen-w6"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 6},
+              "active_indegrees": {"const": [3, 3, 2, 1, 1]},
+              "mobile_triple_columns": {"const": [0, 1]},
+              "inert_multiplicity": {"const": 3}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-c-frozen-w7"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 7},
+              "active_indegrees": {"const": [3, 3, 2, 2, 1, 1]},
+              "mobile_triple_columns": {"const": [0, 1]},
+              "inert_multiplicity": {"const": 3}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-c-mobile-w6"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 6},
+              "active_indegrees": {"const": [3, 3, 3, 1, 1]},
+              "mobile_triple_columns": {"const": [0, 1, 2]},
+              "inert_multiplicity": {"const": 2}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"profile_id": {"const": "d8-c-mobile-w7"}}},
+          "then": {
+            "properties": {
+              "vertex_count": {"const": 7},
+              "active_indegrees": {"const": [3, 3, 3, 2, 1, 1]},
+              "mobile_triple_columns": {"const": [0, 1, 2]},
+              "inert_multiplicity": {"const": 2}
+            }
+          }
+        }
+      ],
+      "properties": {
+        "profile_id": {
+          "description": "Stable identifier for one normalized built-in profile.",
+          "enum": [
+            "d8-a-w5",
+            "d8-b-w6",
+            "d8-c-frozen-w5",
+            "d8-c-frozen-w6",
+            "d8-c-frozen-w7",
+            "d8-c-mobile-w6",
+            "d8-c-mobile-w7"
+          ]
+        },
+        "vertex_count": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 7,
+          "description": "Number of reachable vertices, including the normalized root."
+        },
+        "active_indegrees": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 6,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "description": "Source-set cardinality for each role-labelled active column."
+        },
+        "mobile_triple_columns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          },
+          "description": "Zero-based active columns eligible for the robustness test."
+        },
+        "inert_multiplicity": {
+          "type": "integer",
+          "enum": [2, 3],
+          "description": "Number of row deficits, equivalently the source-set size of the omitted inert column."
+        },
+        "counts": {
+          "$ref": "#/$defs/counts"
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_assignments",
+        "root_outdegree_at_least_two",
+        "root_reachable",
+        "dependency_admissible",
+        "incidence_admissible",
+        "initial_all_mobile_triples_fragile",
+        "pivot_resolved",
+        "pivot_unresolved",
+        "minimum_pivot_depth_histogram"
+      ],
+      "properties": {
+        "candidate_assignments": {
+          "$ref": "#/$defs/count",
+          "description": "Loopless Cartesian-product source assignments before filters."
+        },
+        "root_outdegree_at_least_two": {
+          "$ref": "#/$defs/count",
+          "description": "Candidates satisfying the root-outdegree condition, counted independently of reachability."
+        },
+        "root_reachable": {
+          "$ref": "#/$defs/count",
+          "description": "Candidates satisfying rooted reachability, counted independently of root outdegree."
+        },
+        "dependency_admissible": {
+          "$ref": "#/$defs/count",
+          "description": "Candidates satisfying both dependency filters."
+        },
+        "incidence_admissible": {
+          "$ref": "#/$defs/count",
+          "description": "Dependency-admissible candidates satisfying the exact row-deficit constraints."
+        },
+        "initial_all_mobile_triples_fragile": {
+          "$ref": "#/$defs/count",
+          "description": "Exact states with no robust mobile triple before pivoting."
+        },
+        "pivot_resolved": {
+          "$ref": "#/$defs/count",
+          "description": "Initially all-fragile states whose pivot component contains a robust state."
+        },
+        "pivot_unresolved": {
+          "$ref": "#/$defs/count",
+          "description": "Initially all-fragile states whose complete pivot component contains no robust state."
+        },
+        "minimum_pivot_depth_histogram": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Exact states grouped by minimum distance to robustness; unresolved states are excluded.",
+          "propertyNames": {
+            "pattern": "^(0|[1-9][0-9]*)$"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/count"
+          }
+        }
+      }
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

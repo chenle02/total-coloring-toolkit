@@ -47,12 +47,34 @@ Completeness has two independent layers: a vertex-mask dynamic program counts
 the required-size complement matchings, then the canonical enumerator's exact
 ordered partition sequence is compared with the stored transcript.
 
+## Finite proof-obligation auditors
+
+The root-level `auditors/` tree contains standalone native programs for finite
+mathematical audits that are not part of the installed Python runtime. The
+`D = 8` dependency auditor is included in the source distribution, while the
+wheel contains only the Python package and versioned schemas. Its C++20
+implementation is optimized for exhaustive orbit traversal; a structurally
+independent Python model under `tests/reference/` recomputes the same counts
+from the definitions. The checked-in JSON fixture is a deterministic golden
+receipt, not raw run output.
+
+This separation is intentional. Search speed, reference readability, public
+data structure, and mathematical interpretation are different trust layers.
+The production and reference implementations share profile semantics but no
+enumeration, reachability, pivot, or state-encoding helpers. See
+[`d8-dependency-audit.md`](d8-dependency-audit.md) for the complete contract.
+
 ## Trust boundary
 
 A SAT result becomes usable only after its semantic certificate passes the
 independent verifier. An UNSAT result is backend evidence until accompanied by
 a checkable proof trace or by a separately reproduced exhaustive reference
 search. Census manifests distinguish these states.
+
+Likewise, a complete dependency-audit receipt proves exhaustion only within
+its abstract role-labelled incidence model. It is not a physical coloring
+certificate and does not establish that any enumerated state is graph
+realizable.
 
 ## Public/private/data split
 

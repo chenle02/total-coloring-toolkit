@@ -7,6 +7,11 @@ All notable changes are documented here. The project follows
 
 ### Added
 
+- Add a documented, dependency-free C++20 auditor for seven exact `D = 8`
+  dependency/root-pivot profiles, with deterministic versioned JSON receipts,
+  a public schema and golden fixture, an independent Python reference model,
+  strict native compilation, differential regression tests, and an
+  unpacked-sdist compile/replay gate for the standalone source.
 - Add a sharded matching-core fixed-precoloring falsification harness with
   canonical size-at-most-two color-class representatives, a two-sided
   degree envelope, independent total-coloring certificate verification,

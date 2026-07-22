@@ -26,7 +26,9 @@ counterexample when another partition remains untested.
   schemas and SHA-256 provenance;
 - wheel-installed access to every versioned JSON schema through a typed,
   traversal-safe resource API;
-- explicit finite audits of algebraic proof obligations.
+- explicit finite audits of algebraic proof obligations;
+- an exact C++20 root-pivot auditor for the seven residual `D = 8` dependency
+  profiles, differentially checked by an independent Python model.
 
 Solver success is computational evidence, not a theorem. Exhaustive claims
 must state the generator, filters, shard coverage, software version, and
@@ -212,10 +214,26 @@ Audit the draft's smallest `c=2`, `P=Q=1` arithmetic case:
 total-coloring proof-audit --repeated 1 --singletons 1 --cap 2
 ```
 
-Commands emit canonical JSON. Exit code `0` means a verified witness or valid
-certificate, `1` means a candidate negative/invalid certificate, `2` means an
-operational error, and `3` means the search was incomplete. A candidate
-negative is never presented as a proved UNSAT result.
+The separate publication auditor for the finite `D = 8` dependency frontier
+is shipped in the source distribution. It enumerates exact role-labelled
+incidence states and root-pivot orbits; it does not claim graph realizability
+or prove the remaining coloring lemma:
+
+```bash
+c++ -std=c++20 -O2 -Wall -Wextra -Wpedantic -Werror \
+  auditors/d8_dependency_audit.cpp -o d8_dependency_audit
+./d8_dependency_audit --suite
+```
+
+See the [mathematical model, build instructions, receipt fields, independent
+reference implementation, and trust boundary](docs/d8-dependency-audit.md).
+
+The installed `total-coloring` commands emit canonical JSON. Exit code `0`
+means a verified witness or valid certificate, `1` means a candidate
+negative/invalid certificate, `2` means an operational error, and `3` means
+the search was incomplete. A candidate negative is never presented as a
+proved UNSAT result. The standalone auditor's smaller CLI contract is
+documented separately at the link above.
 
 See [the mathematical specification](docs/mathematical-specification.md),
 [architecture](docs/architecture.md), and

@@ -11,6 +11,7 @@ from total_coloring.schema_resources import read_schema_json
 @pytest.mark.parametrize(
     "name",
     [
+        "d8-dependency-pivot-audit-v1.schema.json",
         "graph-v1.schema.json",
         "paired-hole-state-v1.schema.json",
         "total-coloring-certificate-v1.schema.json",
